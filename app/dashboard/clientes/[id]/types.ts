@@ -1,6 +1,7 @@
 import type { CurrencyCode } from "@/lib/format";
 import type { ComponentKindCode, InteractionTypeCode, ProjectStatusCode } from "@/lib/tasks/labels";
 import type { TaskRow } from "@/components/tasks/types";
+import type { SocialKey, StageCode } from "@/components/clients/social-links";
 
 export type ContractTypeCode = "SAAS_SUBSCRIPTION" | "MAINTENANCE" | "CUSTOM_DEVELOPMENT";
 
@@ -82,12 +83,14 @@ export type ClientDetail = {
     id: string;
     companyName: string;
     contactName: string;
-    email: string;
+    email: string | null;
     phone: string | null;
     status: boolean;
+    stage: StageCode;
+    convertedAt: string | null;
     lastContactAt: string | null;
     createdAt: string;
-  };
+  } & Record<SocialKey, string | null>;
   projects: ProjectRow[];
   contracts: ClientContract[];
   invoices: { pending: InvoiceRow[]; paid: InvoiceRow[] };

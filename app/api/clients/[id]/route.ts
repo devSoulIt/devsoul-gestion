@@ -1,19 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PaymentStatus, Prisma, TaskStatus, TicketStatus } from "@prisma/client";
+import { ClientStage, PaymentStatus, Prisma, TaskStatus, TicketStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { parseClient, type ClientBody } from "@/lib/clients";
 import { businessDateKey } from "@/lib/dates";
 import { invoiceAmountArs } from "@/lib/finance/invoices";
 import { getCurrentRates } from "@/lib/finance/rates";
 import { projectInclude } from "@/lib/projects";
 import { taskInclude } from "@/lib/tasks/service";
-
-type UpdateClientBody = {
-  companyName?: string;
-  contactName?: string;
-  email?: string;
-  phone?: string | null;
-  status?: boolean;
-};
 
 const invoiceSelect = {
   id: true,
@@ -126,21 +119,36 @@ export async function PUT(
 ) {
   try {
     const { id } = await params;
-    const body: UpdateClientBody = await req.json();
+    const parsed = parseClient((await req.json()) as ClientBody, true);
+    if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
     const existing = await prisma.client.findFirst({ where: { id, deletedAt: null } });
     if (!existing) {
       return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
     }
 
+    const stage = parsed.data.stage ?? existing.stage;
+    const email = parsed.data.email !== undefined ? parsed.data.email : existing.email;
+    if (stage === ClientStage.CLIENT && !email) {
+      return NextResponse.json({ error: "Un cliente necesita email para recibir avisos de facturas" }, { status: 400 });
+    }
+    if (stage === ClientStage.PROSPECT && existing.stage === ClientStage.CLIENT) {
+      const activeContracts = await prisma.contract.count({
+        where: { clientId: id, active: true, deletedAt: null },
+      });
+      if (activeContracts > 0) {
+        return NextResponse.json(
+          { error: "Tiene contratos activos: no puede volver a posible cliente" },
+          { status: 409 }
+        );
+      }
+    }
+
     const updated = await prisma.client.update({
       where: { id },
       data: {
-        ...(body.companyName !== undefined && { companyName: body.companyName }),
-        ...(body.contactName !== undefined && { contactName: body.contactName }),
-        ...(body.email !== undefined && { email: body.email }),
-        ...(body.phone !== undefined && { phone: body.phone }),
-        ...(body.status !== undefined && { status: body.status }),
+        ...parsed.data,
+        ...(stage === ClientStage.CLIENT && !existing.convertedAt && { convertedAt: new Date() }),
       },
     });
 

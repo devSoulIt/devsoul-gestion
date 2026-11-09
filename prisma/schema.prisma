@@ -131,6 +131,11 @@ enum TaskRecurrence {
   YEARLY
 }
 
+enum ClientStage {
+  PROSPECT
+  CLIENT
+}
+
 enum InteractionType {
   CALL
   EMAIL
@@ -157,8 +162,16 @@ model Client {
   id            String              @id @default(cuid())
   companyName   String
   contactName   String
-  email         String              @unique
+  email         String?             @unique
   phone         String?
+  stage         ClientStage         @default(PROSPECT)
+  convertedAt   DateTime?
+  website       String?
+  instagram     String?
+  facebook      String?
+  linkedin      String?
+  tiktok        String?
+  x             String?
   status        Boolean             @default(true)
   lastContactAt DateTime?
   contracts     Contract[]
@@ -171,6 +184,7 @@ model Client {
   deletedAt     DateTime?
 
   @@index([deletedAt])
+  @@index([stage])
 }
 
 model Software {

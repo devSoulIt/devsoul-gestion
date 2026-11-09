@@ -12,6 +12,7 @@ Estados: 🟢 terminado · 🟡 en curso · ⚪ planificado
 
 - **Proyectos por cliente:** un cliente tiene varios proyectos y cada proyecto, varios componentes (web, app móvil, backend, panel admin, integraciones). Un componente puede apuntar a un software del catálogo, por ejemplo un SaaS propio, y guarda la URL, el repo y notas. Los contratos y los tickets se pueden asociar a un proyecto.
 - **Recordatorios internos:** cobrar, enviar un mensaje, llamar, reunión, renovación o seguimiento. Tienen responsable, fecha y repetición (semanal, mensual o anual) y se pueden vincular a un cliente, un proyecto o una factura. Todos los días a la mañana, cada responsable recibe por email un resumen con sus recordatorios vencidos y los del día.
+- **Etapas del cliente:** cada cliente se registra como *posible cliente* (hubo un acercamiento o una reunión) o como *cliente* (ya estamos trabajando). Pasa a cliente solo al cargarle el primer contrato. Se guardan la web y las redes sociales (Instagram, Facebook, LinkedIn, TikTok y X).
 - **Ficha del cliente:** proyectos y componentes, recordatorios, facturación (pendiente, vencida y cobrada), tickets abiertos e historial de interacciones (llamadas, emails, WhatsApp, reuniones y notas), con la fecha del último contacto.
 
 ---

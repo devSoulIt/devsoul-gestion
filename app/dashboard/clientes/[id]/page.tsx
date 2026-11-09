@@ -4,10 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { Button } from "@heroui/react/button";
-import { ArrowLeft, BellRing, Mail, MessageCircle, MessageSquarePlus, Phone, Plus } from "lucide-react";
+import { ArrowLeft, BellRing, Handshake, Mail, MessageCircle, MessageSquarePlus, Phone, Plus } from "lucide-react";
 import { useJson } from "@/lib/hooks/use-json";
 import { formatAmount, formatDate } from "@/lib/format";
 import { TaskList } from "@/components/tasks/task-list";
+import { postJson } from "@/components/form-modal";
+import { SocialLinks, StageBadge } from "@/components/clients/social-links";
 import { TaskModal } from "@/components/tasks/task-modal";
 import type { TaskDefaults, TaskRow } from "@/components/tasks/types";
 import { ProjectsSection } from "./projects-section";
@@ -45,6 +47,8 @@ export default function ClientDetailPage() {
     task: null,
   });
   const [interactionOpen, setInteractionOpen] = useState(false);
+  const [converting, setConverting] = useState(false);
+  const [convertError, setConvertError] = useState<string | null>(null);
 
   const openTask = (defaults?: TaskDefaults, task: TaskRow | null = null) =>
     setTaskModal({ open: true, task, defaults: { clientId: id, ...defaults } });
@@ -70,6 +74,15 @@ export default function ClientDetailPage() {
   }
 
   const { client, summary } = detail.data;
+
+  const convert = async () => {
+    setConverting(true);
+    setConvertError(null);
+    const err = await postJson(`/api/clients/${client.id}`, { stage: "CLIENT" }, "PUT");
+    setConverting(false);
+    if (err) return setConvertError(err);
+    detail.reload();
+  };
   const wa = client.phone ? whatsappUrl(client.phone) : null;
   const counts: Partial<Record<Tab, number>> = {
     projects: detail.data.projects.length,
@@ -108,25 +121,24 @@ export default function ClientDetailPage() {
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="text-xl font-bold text-white leading-tight">{client.companyName}</h1>
-              <span
-                className={`rounded-full border px-2 py-px text-[11px] ${
-                  client.status
-                    ? "border-green-500/40 bg-green-500/10 text-green-400"
-                    : "border-white/15 bg-white/5 text-white/40"
-                }`}
-              >
-                {client.status ? "Activo" : "Inactivo"}
-              </span>
+              <StageBadge stage={client.stage} />
+              {!client.status && (
+                <span className="rounded-full border border-white/15 bg-white/5 px-2 py-px text-[11px] text-white/40">
+                  Inactivo
+                </span>
+              )}
             </div>
             <p className="text-sm text-white/60">{client.contactName}</p>
             <div className="mt-2 flex flex-wrap gap-2 text-xs">
-              <a
-                href={`mailto:${client.email}`}
-                className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white/60 hover:text-white"
-              >
-                <Mail size={12} />
-                <span className="max-w-[180px] truncate">{client.email}</span>
-              </a>
+              {client.email && (
+                <a
+                  href={`mailto:${client.email}`}
+                  className="flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white/60 hover:text-white"
+                >
+                  <Mail size={12} />
+                  <span className="max-w-[180px] truncate">{client.email}</span>
+                </a>
+              )}
               {client.phone && (
                 <a
                   href={`tel:${client.phone}`}
@@ -148,7 +160,11 @@ export default function ClientDetailPage() {
                 </a>
               )}
             </div>
+            <div className="mt-2">
+              <SocialLinks socials={client} size="md" />
+            </div>
             <p className="mt-2 text-[11px] text-white/40">
+              {client.stage === "CLIENT" && client.convertedAt && `Cliente desde ${formatDate(client.convertedAt)} · `}
               {client.lastContactAt
                 ? `Último contacto: ${formatDate(client.lastContactAt)} (hace ${daysSince(client.lastContactAt)} días)`
                 : "Sin contactos registrados"}
@@ -164,6 +180,28 @@ export default function ClientDetailPage() {
             </div>
           ))}
         </div>
+
+        {client.stage === "PROSPECT" && (
+          <div className="flex flex-col gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 sm:flex-row sm:items-center">
+            <p className="flex-1 text-xs text-amber-200/80">
+              Posible cliente: hubo un acercamiento, todavía no trabajamos juntos. Pasa a cliente solo al cargarle un
+              contrato, o marcalo a mano.
+            </p>
+            <Button
+              onPress={convert}
+              isDisabled={converting}
+              className="bg-amber-400 text-black text-xs font-medium px-3 rounded-lg"
+            >
+              <Handshake size={14} />
+              <span className="ml-1">{converting ? "Guardando..." : "Pasar a cliente"}</span>
+            </Button>
+          </div>
+        )}
+        {convertError && (
+          <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-400">
+            {convertError}
+          </p>
+        )}
 
         <div className="flex gap-2">
           <Button

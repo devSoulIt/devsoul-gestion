@@ -394,6 +394,26 @@ Ampliá el resumen que se inyecta en /api/ia/chat con:
   - `GET /api/users` lista a los usuarios para elegir el responsable.
   - Probado end-to-end en una base descartable con un script de 59 checks: validaciones cruzadas cliente/proyecto/factura, 409s, recurrencia, filtros, ficha, digest y páginas. También se revisó la UI en el navegador en desktop; no se pudo probar a 375px porque la ventana no se redimensionó.
 
+### P7.5: Etapas del cliente y redes sociales
+- **Estado:** [x]
+- **Depende de:** P7.3
+- **Fecha:** 09/11/2026 · **Commit:** `__P75__` · **Notas:** Migración `20261109180000_client_stage_socials`.
+  - `Client.stage` (`PROSPECT` = posible cliente, cuando hubo un acercamiento o una reunión; `CLIENT` = ya estamos trabajando) y `convertedAt`. La migración pasa a todos los clientes existentes a `CLIENT`.
+  - Un cliente nuevo arranca por defecto como posible cliente. Pasa a `CLIENT` de alguna de estas formas:
+    - Automáticamente, al crearle el primer contrato (`POST /api/contracts`).
+    - A mano, con el botón "Pasar a cliente" de la ficha o desde la edición.
+    - Volver a posible cliente responde 409 si tiene contratos activos.
+  - `Client.email` pasa a ser opcional para los posibles clientes. Es obligatorio para la etapa `CLIENT` y para crear un contrato, porque los avisos de facturas salen por email. `lib/billing/reminders.ts` omite a los clientes sin email.
+  - Redes: `website`, `instagram`, `facebook`, `linkedin`, `tiktok` y `x`.
+    - Se acepta `@usuario`, el usuario solo o el link, y se guarda como URL (`normalizeSocial` en `lib/clients.ts`).
+    - Un valor solo se interpreta como link si trae `http` o una `/`, así que `clinica.sur` se toma como usuario.
+  - UI:
+    - Clientes: filtros "Todos / Posibles clientes / Clientes" con contadores, badge de etapa, redes en cada tarjeta y formulario con selector de etapa y sección de redes.
+    - Ficha: badge de etapa, redes, "Cliente desde…" y aviso con el botón "Pasar a cliente".
+    - Contratos: el selector marca "(posible cliente)" y avisa que al crear el contrato pasa a la etapa Cliente.
+  - El KPI "Clientes activos" del dashboard cuenta solo la etapa `CLIENT`.
+  - Probado: validación y normalización (19 casos) y smoke test de solo lectura contra la base de desarrollo, que no tiene usuarios porque el seed de P0.2 sigue pendiente.
+
 ### P7.4: Bug de período en facturas de contratos nuevos
 - **Estado:** [ ]
 - **Depende de:** nada

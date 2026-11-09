@@ -72,6 +72,8 @@ curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/invo
 
 ## Clientes, proyectos y recordatorios
 
+- **Etapas**: un cliente se registra como **posible cliente** (hubo un acercamiento o una reunión) o como **cliente** (ya estamos trabajando). Pasa a cliente solo al cargarle el primer contrato, o a mano desde la ficha. El email es obligatorio solo para los clientes.
+- **Redes sociales**: web, Instagram, Facebook, LinkedIn, TikTok y X. Se puede cargar `@usuario` o el link completo.
 - **Proyectos**: cada cliente tiene proyectos, y cada proyecto, varios softwares o componentes (web, app móvil, backend, panel admin, integraciones). Un componente puede apuntar a un software del catálogo. Los contratos y los tickets se pueden asociar a un proyecto.
 - **Ficha del cliente** (Clientes → Ver ficha): proyectos, recordatorios, facturación, tickets e historial de contacto.
 - **Recordatorios**: tareas internas del equipo, como cobrar, escribir, llamar o renovar. Tienen responsable, fecha y repetición opcional. Se ven en la sección Recordatorios, en el dashboard y en la ficha de cada cliente.

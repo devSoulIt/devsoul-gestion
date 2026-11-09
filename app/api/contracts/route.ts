@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ContractType, Currency, PaymentStatus } from "@prisma/client";
+import { ClientStage, ContractType, Currency, PaymentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { findClientProject } from "@/lib/projects";
 
@@ -42,6 +42,12 @@ export async function POST(req: NextRequest) {
     if (!client) {
       return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
     }
+    if (!client.email) {
+      return NextResponse.json(
+        { error: "Cargá el email del cliente antes de crear el contrato (se usa para avisos de facturas)" },
+        { status: 400 }
+      );
+    }
 
     const software = await prisma.software.findFirst({ where: { id: softwareId, deletedAt: null } });
     if (!software) {
@@ -58,6 +64,13 @@ export async function POST(req: NextRequest) {
       `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 
     const result = await prisma.$transaction(async (tx) => {
+      if (client.stage === ClientStage.PROSPECT) {
+        await tx.client.update({
+          where: { id: client.id },
+          data: { stage: ClientStage.CLIENT, convertedAt: new Date() },
+        });
+      }
+
       const contract = await tx.contract.create({
         data: { clientId, softwareId, projectId: project.projectId, type, totalAmount, currency, startDate: start },
       });

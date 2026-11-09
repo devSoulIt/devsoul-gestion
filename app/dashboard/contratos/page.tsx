@@ -22,7 +22,7 @@ type ContractRow = {
   _count: { invoices: number };
 };
 
-type ClientOption = { id: string; companyName: string };
+type ClientOption = { id: string; companyName: string; stage: "PROSPECT" | "CLIENT"; email: string | null };
 type SoftwareOption = { id: string; name: string; basePrice: string };
 
 type FormState = {
@@ -329,10 +329,17 @@ export default function ContratosPage() {
                       {clients.map((c) => (
                         <option key={c.id} value={c.id} className="bg-black">
                           {c.companyName}
+                          {c.stage === "PROSPECT" ? " (posible cliente)" : ""}
                         </option>
                       ))}
                     </select>
                   </div>
+
+                  {clients.find((c) => c.id === form.clientId)?.stage === "PROSPECT" && (
+                    <p className="text-xs text-amber-300/90 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+                      Es un posible cliente: al crear el contrato pasa a la etapa Cliente.
+                    </p>
+                  )}
 
                   {(projects.data?.length ?? 0) > 0 && (
                     <div>
