@@ -338,7 +338,7 @@ Ampliá el resumen que se inyecta en /api/ia/chat con:
 ### P7.1: Proyectos y componentes
 - **Estado:** [x]
 - **Depende de:** P0.1
-- **Fecha:** 09/11/2026 · **Commit:** `__P7__` · **Notas:** Migración `20261109120000_projects_tasks_interactions`.
+- **Fecha:** 09/11/2026 · **Commit:** `a52b719` · **Notas:** Migración `20261109120000_projects_tasks_interactions`.
   - Modelo: `Client → Project → ProjectComponent`. Un componente (WEB, MOBILE, BACKEND, ADMIN, INTEGRATION u OTHER) puede apuntar a un `Software` del catálogo y guarda la URL, el repo y notas. Las URLs se normalizan agregando `https://` si falta.
   - `Contract.projectId` y `Ticket.projectId` son opcionales, así que los datos existentes no cambian. El proyecto se valida contra el cliente (400 si es de otro), con `findClientProject` de `lib/projects.ts`.
   - Los proyectos tienen soft-delete. `DELETE` responde 409 si el proyecto tiene contratos activos; los componentes, en cambio, se borran físicamente porque no tienen dependencias.
@@ -354,7 +354,7 @@ Ampliá el resumen que se inyecta en /api/ia/chat con:
 ### P7.2: Recordatorios internos
 - **Estado:** [x]
 - **Depende de:** P1.1
-- **Fecha:** 09/11/2026 · **Commit:** `__P7__` · **Notas:**
+- **Fecha:** 09/11/2026 · **Commit:** `a52b719` · **Notas:**
   - Modelo `Task` (en la UI, "Recordatorio"):
     - Tipos: COLLECTION, MESSAGE, CALL, MEETING, RENEWAL, FOLLOW_UP y OTHER.
     - Estados: PENDING, DONE y CANCELLED.
@@ -380,7 +380,7 @@ Ampliá el resumen que se inyecta en /api/ia/chat con:
 ### P7.3: Ficha del cliente e historial de contacto
 - **Estado:** [x]
 - **Depende de:** P7.1, P7.2
-- **Fecha:** 09/11/2026 · **Commit:** `__P7__` · **Notas:**
+- **Fecha:** 09/11/2026 · **Commit:** `a52b719` · **Notas:**
   - `GET /api/clients/[id]` devuelve la ficha agregada:
     - Proyectos, contratos y tickets abiertos.
     - Facturas pendientes (con `amountArs` y `overdue`) y las últimas 10 cobradas.
