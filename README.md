@@ -18,6 +18,7 @@ Sistema de gestión interna de Devsoul: clientes, softwares, contratos, facturac
    - `CRON_SECRET`: 16 caracteres o más. Protege los endpoints `/api/cron/*`.
    - `RESEND_API_KEY`, `EMAIL_FROM` y `EMAIL_REPLY_TO` (opcional): para los recordatorios por email.
    - `INVOICE_DUE_DAY`, `REMINDER_DAYS_BEFORE` y `REMINDER_DAYS_AFTER` (opcionales): por defecto 10, 3 y 7.
+   - `APP_URL` (opcional): la URL pública de la app. Se usa en el link del resumen diario de recordatorios.
    - `OPENAI_API_KEY`: para el chat de IA.
 
 3. Aplicar las migraciones y cargar los datos iniciales:
@@ -46,11 +47,12 @@ Sistema de gestión interna de Devsoul: clientes, softwares, contratos, facturac
 
 ## Automatizaciones (Vercel Cron)
 
-`vercel.json` programa dos tareas diarias. En el plan Hobby, Vercel puede ejecutarlas en cualquier momento dentro de la hora indicada.
+`vercel.json` programa tres tareas diarias. En el plan Hobby, Vercel puede ejecutarlas en cualquier momento dentro de la hora indicada.
 
 | Endpoint | Horario (UTC) | Qué hace |
 | --- | --- | --- |
 | `/api/cron/invoices` | 10:00 (7:00 ART) | Genera la factura del mes de cada contrato SaaS o de mantenimiento activo que no tenga una. Es idempotente, así que correrlo todos los días recupera las ejecuciones perdidas. |
+| `/api/cron/tasks` | 11:00 (8:00 ART) | Envía a cada socio un email con sus recordatorios vencidos y los del día. Los que no tienen responsable van a todos los `OWNER`. Sale una vez por día. |
 | `/api/cron/reminders` | 12:00 (9:00 ART) | Envía por email los recordatorios de facturas pendientes: 3 días antes del vencimiento, el día del vencimiento y 7 días después. Cada uno sale una sola vez por factura y los fallos se reintentan hasta 5 veces. |
 
 Para ponerlo en marcha en Vercel:
@@ -67,6 +69,12 @@ Para probar localmente:
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/invoices
 ```
+
+## Clientes, proyectos y recordatorios
+
+- **Proyectos**: cada cliente tiene proyectos, y cada proyecto, varios softwares o componentes (web, app móvil, backend, panel admin, integraciones). Un componente puede apuntar a un software del catálogo. Los contratos y los tickets se pueden asociar a un proyecto.
+- **Ficha del cliente** (Clientes → Ver ficha): proyectos, recordatorios, facturación, tickets e historial de contacto.
+- **Recordatorios**: tareas internas del equipo, como cobrar, escribir, llamar o renovar. Tienen responsable, fecha y repetición opcional. Se ven en la sección Recordatorios, en el dashboard y en la ficha de cada cliente.
 
 ## Roles
 

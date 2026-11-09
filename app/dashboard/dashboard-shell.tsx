@@ -12,6 +12,7 @@ import {
   Wallet,
   Ticket,
   Bot,
+  BellRing,
   Menu,
   X,
   LogOut,
@@ -31,6 +32,7 @@ const roleLabels: Record<string, string> = {
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard/recordatorios", label: "Recordatorios", icon: BellRing },
   { href: "/dashboard/clientes", label: "Clientes", icon: Users },
   { href: "/dashboard/contratos", label: "Contratos", icon: FileSignature },
   { href: "/dashboard/softwares", label: "Softwares", icon: Package },
@@ -42,6 +44,7 @@ const navItems = [
 
 const sectionLabels: Record<string, string> = {
   "/dashboard": "Dashboard",
+  "/dashboard/recordatorios": "Recordatorios",
   "/dashboard/clientes": "Clientes",
   "/dashboard/contratos": "Contratos",
   "/dashboard/softwares": "Softwares",

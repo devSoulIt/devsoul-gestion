@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
+import { Prisma, TaskStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 type CreateClientBody = {
@@ -45,7 +45,11 @@ export async function GET() {
       where: { deletedAt: null },
       include: {
         _count: {
-          select: { contracts: { where: { active: true, deletedAt: null } } },
+          select: {
+            contracts: { where: { active: true, deletedAt: null } },
+            projects: { where: { deletedAt: null } },
+            tasks: { where: { status: TaskStatus.PENDING } },
+          },
         },
       },
       orderBy: { createdAt: "desc" },

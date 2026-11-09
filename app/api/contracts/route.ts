@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ContractType, Currency, PaymentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { findClientProject } from "@/lib/projects";
 
 type CreateContractBody = {
   clientId: string;
   softwareId: string;
+  projectId?: string | null;
   type: ContractType;
   totalAmount: number;
   currency: Currency;
@@ -15,7 +17,7 @@ type CreateContractBody = {
 export async function POST(req: NextRequest) {
   try {
     const body: CreateContractBody = await req.json();
-    const { clientId, softwareId, type, totalAmount, currency, installmentsCount, startDate } = body;
+    const { clientId, softwareId, projectId, type, totalAmount, currency, installmentsCount, startDate } = body;
 
     if (!clientId || !softwareId || !type || totalAmount === undefined || !currency || !startDate) {
       return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 });
@@ -46,13 +48,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Software no encontrado" }, { status: 404 });
     }
 
+    const project = await findClientProject(projectId, clientId);
+    if (!project.ok) {
+      return NextResponse.json({ error: project.error }, { status: project.status });
+    }
+
     const start = new Date(startDate);
     const monthPeriod = (d: Date) =>
       `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 
     const result = await prisma.$transaction(async (tx) => {
       const contract = await tx.contract.create({
-        data: { clientId, softwareId, type, totalAmount, currency, startDate: start },
+        data: { clientId, softwareId, projectId: project.projectId, type, totalAmount, currency, startDate: start },
       });
 
       if (type === ContractType.CUSTOM_DEVELOPMENT) {
@@ -107,17 +114,20 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = req.nextUrl;
     const clientId = searchParams.get("clientId") ?? undefined;
+    const projectId = searchParams.get("projectId") ?? undefined;
     const activeParam = searchParams.get("active");
 
     const contracts = await prisma.contract.findMany({
       where: {
         deletedAt: null,
         ...(clientId ? { clientId } : {}),
+        ...(projectId ? { projectId } : {}),
         ...(activeParam !== null ? { active: activeParam === "true" } : {}),
       },
       include: {
         client: true,
         software: true,
+        project: { select: { id: true, name: true } },
         _count: {
           select: { invoices: { where: { status: PaymentStatus.PENDING } } },
         },

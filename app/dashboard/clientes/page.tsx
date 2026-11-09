@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import { Card } from "@heroui/react/card";
 import { Chip } from "@heroui/react/chip";
 import { Input } from "@heroui/react/input";
 import { Button } from "@heroui/react/button";
 import { Modal } from "@heroui/react";
-import { Archive, Pencil, Eye, Plus, Search, Users } from "lucide-react";
+import { Archive, BellRing, Pencil, Eye, Plus, Search, Users } from "lucide-react";
 
 type ClientRow = {
   id: string;
@@ -15,7 +16,8 @@ type ClientRow = {
   email: string;
   phone: string | null;
   status: boolean;
-  _count: { contracts: number };
+  lastContactAt: string | null;
+  _count: { contracts: number; projects: number; tasks: number };
 };
 
 type FormState = {
@@ -232,9 +234,20 @@ export default function ClientesPage() {
               <Card.Content className="px-5 py-3 space-y-1">
                 <p className="text-sm text-white/70">{c.contactName}</p>
                 <p className="text-xs text-white/40 truncate">{c.email}</p>
-                <p className="text-xs text-acento-lima/80 mt-2">
-                  Contratos activos: {c._count.contracts}
-                </p>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs mt-2">
+                  <span className="text-acento-lima/80">
+                    {c._count.projects} proyecto{c._count.projects === 1 ? "" : "s"}
+                  </span>
+                  <span className="text-white/50">
+                    {c._count.contracts} contrato{c._count.contracts === 1 ? "" : "s"} activo{c._count.contracts === 1 ? "" : "s"}
+                  </span>
+                  {c._count.tasks > 0 && (
+                    <span className="flex items-center gap-1 text-amber-300">
+                      <BellRing size={11} />
+                      {c._count.tasks}
+                    </span>
+                  )}
+                </div>
               </Card.Content>
               <Card.Footer className="px-5 pb-4 pt-0 flex gap-3">
                 <button
@@ -244,10 +257,13 @@ export default function ClientesPage() {
                   <Pencil size={13} />
                   Editar
                 </button>
-                <button className="flex items-center gap-1.5 text-xs text-white/50 hover:text-white transition-colors">
+                <Link
+                  href={`/dashboard/clientes/${c.id}`}
+                  className="flex items-center gap-1.5 text-xs text-white/50 hover:text-acento-lima transition-colors"
+                >
                   <Eye size={13} />
-                  Ver
-                </button>
+                  Ver ficha
+                </Link>
               </Card.Footer>
             </Card.Root>
           ))}

@@ -6,6 +6,7 @@ import { Input } from "@heroui/react/input";
 import { Button } from "@heroui/react/button";
 import { Modal } from "@heroui/react";
 import { Plus, FileSignature, Power } from "lucide-react";
+import { useJson } from "@/lib/hooks/use-json";
 
 type ContractRow = {
   id: string;
@@ -17,6 +18,7 @@ type ContractRow = {
   endDate: string | null;
   client: { id: string; companyName: string };
   software: { id: string; name: string };
+  project: { id: string; name: string } | null;
   _count: { invoices: number };
 };
 
@@ -26,6 +28,7 @@ type SoftwareOption = { id: string; name: string; basePrice: string };
 type FormState = {
   clientId: string;
   softwareId: string;
+  projectId: string;
   type: ContractRow["type"];
   totalAmount: string;
   currency: "ARS" | "USD";
@@ -42,6 +45,7 @@ const TYPE_LABEL: Record<ContractRow["type"], string> = {
 const EMPTY_FORM: FormState = {
   clientId: "",
   softwareId: "",
+  projectId: "",
   type: "SAAS_SUBSCRIPTION",
   totalAmount: "",
   currency: "ARS",
@@ -102,6 +106,10 @@ export default function ContratosPage() {
     });
   }, []);
 
+  const projects = useJson<{ id: string; name: string }[]>(
+    modalOpen && form.clientId ? `/api/projects?clientId=${encodeURIComponent(form.clientId)}` : null
+  );
+
   const visible = useMemo(
     () => (showInactive ? contracts : contracts.filter((c) => c.active)),
     [contracts, showInactive]
@@ -150,6 +158,7 @@ export default function ContratosPage() {
         body: JSON.stringify({
           clientId: form.clientId,
           softwareId: form.softwareId,
+          projectId: form.projectId || null,
           type: form.type,
           totalAmount: Number(form.totalAmount),
           currency: form.currency,
@@ -242,7 +251,10 @@ export default function ContratosPage() {
                 <p className="text-sm font-semibold text-white truncate">
                   {c.client.companyName}
                 </p>
-                <p className="text-xs text-white/50 truncate">{c.software.name}</p>
+                <p className="text-xs text-white/50 truncate">
+                  {c.software.name}
+                  {c.project && <span className="text-acento-lima/70"> · {c.project.name}</span>}
+                </p>
               </div>
 
               <p className="text-xs text-white/50 md:text-sm">{TYPE_LABEL[c.type]}</p>
@@ -310,7 +322,7 @@ export default function ContratosPage() {
                     <label className="text-xs text-white/50 mb-1 block">Cliente *</label>
                     <select
                       value={form.clientId}
-                      onChange={(e) => setField("clientId", e.target.value)}
+                      onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value, projectId: "" }))}
                       className={`${selectClass} w-full`}
                     >
                       <option value="" className="bg-black">Seleccionar cliente...</option>
@@ -321,6 +333,24 @@ export default function ContratosPage() {
                       ))}
                     </select>
                   </div>
+
+                  {(projects.data?.length ?? 0) > 0 && (
+                    <div>
+                      <label className="text-xs text-white/50 mb-1 block">Proyecto</label>
+                      <select
+                        value={form.projectId}
+                        onChange={(e) => setField("projectId", e.target.value)}
+                        className={`${selectClass} w-full`}
+                      >
+                        <option value="" className="bg-black">Sin proyecto</option>
+                        {(projects.data ?? []).map((p) => (
+                          <option key={p.id} value={p.id} className="bg-black">
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   <div>
                     <label className="text-xs text-white/50 mb-1 block">Software *</label>

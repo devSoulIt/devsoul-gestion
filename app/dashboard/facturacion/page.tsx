@@ -5,11 +5,13 @@ import { Chip } from "@heroui/react/chip";
 import { Input } from "@heroui/react/input";
 import { Button } from "@heroui/react/button";
 import { Modal } from "@heroui/react";
-import { Bell, CheckCircle, FileText, Plus, Repeat, Zap } from "lucide-react";
+import { Bell, BellRing, CheckCircle, FileText, Plus, Repeat, Zap } from "lucide-react";
 import { useJson } from "@/lib/hooks/use-json";
 import type { AccountsResponse } from "../finanzas/types";
 import { PayInvoiceModal, type PayableInvoice } from "./pay-invoice-modal";
 import { AutomationModal } from "./automation-modal";
+import { TaskModal } from "@/components/tasks/task-modal";
+import type { TaskDefaults } from "@/components/tasks/types";
 
 type InvoiceRow = {
   id: string;
@@ -104,6 +106,7 @@ export default function FacturacionPage() {
   });
   const [loadingMore, setLoadingMore] = useState(false);
 
+  const [collectionTask, setCollectionTask] = useState<TaskDefaults | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
@@ -336,7 +339,23 @@ export default function FacturacionPage() {
                   </div>
 
                   {/* Acción */}
-                  <div className="flex justify-end md:justify-center">
+                  <div className="flex justify-end md:justify-center gap-3">
+                    {overdue && (
+                      <button
+                        onClick={() =>
+                          setCollectionTask({
+                            type: "COLLECTION",
+                            clientId: inv.contract.client.id,
+                            invoiceId: inv.id,
+                            title: `Cobrar ${inv.contract.software.name} ${inv.period}`,
+                          })
+                        }
+                        title="Crear recordatorio de cobro"
+                        className="text-white/40 hover:text-acento-lima transition-colors"
+                      >
+                        <BellRing size={17} />
+                      </button>
+                    )}
                     {inv.status === "PENDING" && (
                       <button
                         onClick={() =>
@@ -490,6 +509,13 @@ export default function FacturacionPage() {
         isOpen={automationOpen}
         onOpenChange={setAutomationOpen}
         onChanged={invoicesQ.reload}
+      />
+
+      <TaskModal
+        isOpen={collectionTask !== null}
+        onOpenChange={(open) => !open && setCollectionTask(null)}
+        defaults={collectionTask ?? undefined}
+        onSaved={() => setCollectionTask(null)}
       />
 
       <PayInvoiceModal

@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { openai } from "@ai-sdk/openai";
 import { streamText, type CoreMessage } from "ai";
-import { PaymentStatus, TransactionType } from "@prisma/client";
+import { PaymentStatus, ProjectStatus, TaskStatus, TransactionType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAccountBalances } from "@/lib/finance/balances";
 import { invoiceAmountArs } from "@/lib/finance/invoices";
+import { businessDateKey } from "@/lib/dates";
+import { TASK_TYPE_LABELS } from "@/lib/tasks/labels";
 
 export const maxDuration = 30;
 
@@ -15,7 +17,9 @@ export async function POST(req: NextRequest) {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    const [ingresoAgg, egresoAgg, pendingInvoices, allInvoices, balances] = await Promise.all([
+    const today = new Date(`${businessDateKey(now)}T00:00:00Z`);
+
+    const [ingresoAgg, egresoAgg, pendingInvoices, allInvoices, balances, overdueTasks, activeProjects] = await Promise.all([
       prisma.transaction.aggregate({
         _sum: { amountArs: true },
         where: { type: TransactionType.INCOME, date: { gte: startOfMonth } },
@@ -37,6 +41,20 @@ export async function POST(req: NextRequest) {
         },
       }),
       getAccountBalances(),
+      prisma.task.findMany({
+        where: { status: TaskStatus.PENDING, dueAt: { lt: today } },
+        select: { title: true, type: true, dueAt: true, client: { select: { companyName: true } } },
+        orderBy: { dueAt: "asc" },
+        take: 10,
+      }),
+      prisma.project.findMany({
+        where: {
+          deletedAt: null,
+          client: { deletedAt: null },
+          status: { notIn: [ProjectStatus.CLOSED, ProjectStatus.PAUSED] },
+        },
+        select: { name: true, status: true, client: { select: { companyName: true } }, _count: { select: { components: true } } },
+      }),
     ]);
 
     const usdRate = balances.usdRate;
@@ -71,6 +89,22 @@ export async function POST(req: NextRequest) {
       ? top3.map(([name, total], i) => `  ${i + 1}. ${name}: ${fmt(total)}`).join("\n")
       : "  (Sin datos)";
 
+    const taskLines = overdueTasks.length
+      ? overdueTasks
+          .map((t) => `  - ${TASK_TYPE_LABELS[t.type]}: ${t.title}${t.client ? ` (${t.client.companyName})` : ""}, vencido el ${t.dueAt.toISOString().slice(0, 10)}`)
+          .join("\n")
+      : "  (Ninguno)";
+    const projectsByClient = new Map<string, string[]>();
+    for (const p of activeProjects) {
+      projectsByClient.set(p.client.companyName, [
+        ...(projectsByClient.get(p.client.companyName) ?? []),
+        `${p.name} [${p.status}, ${p._count.components} softwares]`,
+      ]);
+    }
+    const projectLines = projectsByClient.size
+      ? [...projectsByClient.entries()].map(([client, list]) => `  - ${client}: ${list.join("; ")}`).join("\n")
+      : "  (Sin proyectos cargados)";
+
     const systemPrompt = `Sos el asistente financiero interno de Devsoul, una startup de desarrollo de software.
 Tu rol es ayudar a los socios a tomar decisiones de negocio con base en datos reales.
 
@@ -84,6 +118,12 @@ ${accountLines}
 - Facturas pendientes de cobro: ${fmt(pending)} (${pendingN} facturas)
 - Top 3 softwares por facturación histórica:
 ${topLines}
+
+Contexto operativo:
+- Recordatorios internos vencidos (${overdueTasks.length}${overdueTasks.length === 10 ? "+" : ""}):
+${taskLines}
+- Proyectos activos por cliente:
+${projectLines}
 
 Respondé siempre en español rioplatense. Sé conciso, directo y orientado a la toma de decisiones.`;
 
