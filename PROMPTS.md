@@ -397,7 +397,7 @@ Ampliá el resumen que se inyecta en /api/ia/chat con:
 ### P7.5: Etapas del cliente y redes sociales
 - **Estado:** [x]
 - **Depende de:** P7.3
-- **Fecha:** 09/11/2026 · **Commit:** `__P75__` · **Notas:** Migración `20261109180000_client_stage_socials`.
+- **Fecha:** 09/11/2026 · **Commit:** `7c4c729` · **Notas:** Migración `20261109180000_client_stage_socials`.
   - `Client.stage` (`PROSPECT` = posible cliente, cuando hubo un acercamiento o una reunión; `CLIENT` = ya estamos trabajando) y `convertedAt`. La migración pasa a todos los clientes existentes a `CLIENT`.
   - Un cliente nuevo arranca por defecto como posible cliente. Pasa a `CLIENT` de alguna de estas formas:
     - Automáticamente, al crearle el primer contrato (`POST /api/contracts`).
