@@ -1,4 +1,5 @@
 import { requireUser } from "@/lib/auth/session";
+import { InstallAppCard } from "@/components/pwa/install-app-card";
 import { ChangePasswordForm } from "./change-password-form";
 
 const ROLE_LABELS: Record<string, string> = {
@@ -30,6 +31,14 @@ export default async function PerfilPage() {
             <p className="text-sm text-white break-all">{f.value}</p>
           </div>
         ))}
+      </section>
+
+      <section className="glass rounded-xl p-5 space-y-4">
+        <div>
+          <h2 className="text-base font-semibold text-white">App en el celular</h2>
+          <p className="text-xs text-white/40 mt-1">Instalá Devsoul en la pantalla de inicio para abrirla como una app.</p>
+        </div>
+        <InstallAppCard />
       </section>
 
       <section className="glass rounded-xl p-5 space-y-4">

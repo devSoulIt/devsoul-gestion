@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -15,6 +15,24 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Devsoul — Sistema de Gestión",
   description: "Panel de gestión interna para Devsoul",
+  applicationName: "Devsoul Gestión",
+  appleWebApp: {
+    capable: true,
+    title: "Devsoul",
+    statusBarStyle: "black",
+  },
+  icons: {
+    icon: [{ url: "/icons/icon.svg", type: "image/svg+xml" }],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180" }],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#000000",
+  colorScheme: "dark",
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

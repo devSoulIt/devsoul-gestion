@@ -431,9 +431,16 @@ Usá los helpers de lib/dates.ts (hora argentina / UTC) para el período y las c
 > Detalle y motivos en `ACTUALIZACIONES.md` (v0.8). Enfoque: PWA instalable con Web Push (VAPID), sin tiendas.
 
 ### P8.1: PWA instalable
-- **Estado:** [ ]
+- **Estado:** [~]
 - **Depende de:** nada
-- **Fecha:** · **Commit:** · **Notas:**
+- **Fecha:** 10/11/2026 · **Commit:** · **Notas:**
+  - `app/manifest.ts` con shortcuts a Recordatorios, Facturación y Tickets. Íconos en `public/icons/`: 192, 512, maskable 512, apple-touch 180 y SVG (una "D" lima sobre negro, generados con sharp).
+  - `public/sw.js`: los HTML van a la red primero y caen en `public/offline.html` si no hay conexión; `/_next/static` e íconos usan cache-first; `/api` y los pedidos de otro origen no se tocan. Se registra desde `components/pwa/service-worker-registrar.tsx` en el layout del dashboard.
+  - Meta tags de iOS desde `metadata.appleWebApp` y `viewport` en `app/layout.tsx`. Next 16 emite `mobile-web-app-capable`, no la variante `apple-`; iOS 16.4+ usa `display: standalone` del manifest.
+  - Perfil → "App en el celular": botón "Instalar app" (`beforeinstallprompt`, guardado en `components/pwa/install-store.ts` porque puede dispararse antes de entrar a Perfil), guía para iPhone y aviso si ya está instalada.
+  - `proxy.ts` excluye `manifest.webmanifest`, `sw.js`, `offline.html` e `icons/`. `next.config.ts` agrega headers de seguridad y `no-cache` para `sw.js`.
+  - Deploy: `postinstall` y `vercel-build` (`prisma generate && prisma migrate deploy && next build`); pasos en README.
+  - Probado: `tsc`, eslint, `next build` y `next start`. Manifest, sw.js, offline e íconos responden 200 sin sesión y `/dashboard` sigue redirigiendo. Falta Lighthouse y probarlo en Android e iOS, que necesitan el deploy con HTTPS.
 
 ```
 Leé la documentación de Next 16 en node_modules/next/dist/docs/ sobre manifest y metadata antes de codificar.

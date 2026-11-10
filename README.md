@@ -70,6 +70,26 @@ Para probar localmente:
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/invoices
 ```
 
+## Deploy en Vercel
+
+1. Crear una base PostgreSQL administrada (por ejemplo, Neon desde *Vercel → Storage*). Usar la URL con pooling en `DATABASE_URL`.
+2. Importar el repo en Vercel y cargar las variables de `.env.example` en *Project Settings → Environment Variables*. `APP_URL` es la URL final (por ejemplo, `https://devsoul-gestion.vercel.app`).
+3. El script `vercel-build` genera el cliente de Prisma, aplica las migraciones pendientes (`prisma migrate deploy`) y compila. Las migraciones se aplican sobre la base configurada en ese entorno, así que los deploys de preview tienen que apuntar a otra base o no tener `DATABASE_URL`.
+4. Cargar los socios una sola vez, desde la máquina local apuntando a la base de producción:
+
+   ```bash
+   DATABASE_URL="<url de producción>" SEED_PASSWORD_MARCE=... SEED_PASSWORD_LAUTARO=... npx prisma db seed
+   ```
+
+## App en el celular (PWA)
+
+El sistema se instala como app desde el navegador, sin tiendas. Necesita HTTPS, así que funciona en el deploy y no por IP local.
+
+- **Android (Chrome)**: entrar, iniciar sesión e ir a **Perfil → Instalar app**, o elegir "Instalar app" en el menú ⋮.
+- **iPhone (Safari, iOS 16.4 o posterior)**: Compartir → **Agregar a inicio**.
+
+La app abre en `/dashboard` a pantalla completa, con accesos directos a Recordatorios, Facturación y Tickets (mantener apretado el ícono en Android). Sin conexión muestra una pantalla de reintento; los datos siempre se piden al servidor y `/api` nunca se cachea.
+
 ## Clientes, proyectos y recordatorios
 
 - **Etapas**: un cliente se registra como **posible cliente** (hubo un acercamiento o una reunión) o como **cliente** (ya estamos trabajando). Pasa a cliente solo al cargarle el primer contrato, o a mano desde la ficha. El email es obligatorio solo para los clientes.
