@@ -6,6 +6,7 @@ import { Chip } from "@heroui/react/chip";
 import { Input } from "@heroui/react/input";
 import { Button } from "@heroui/react/button";
 import { Plus, Wrench } from "lucide-react";
+import { useJson } from "@/lib/hooks/use-json";
 
 type TicketRow = {
   id: string;
@@ -15,12 +16,14 @@ type TicketRow = {
   priority: "LOW" | "MEDIUM" | "HIGH";
   client: { id: string; companyName: string };
   software: { id: string; name: string };
+  project?: { id: string; name: string } | null;
   createdAt: string;
 };
 
 type FormState = {
   clientId: string;
   softwareId: string;
+  projectId: string;
   title: string;
   description: string;
   priority: "LOW" | "MEDIUM" | "HIGH";
@@ -32,6 +35,7 @@ type SoftwareOption = { id: string; name: string };
 const EMPTY_FORM: FormState = {
   clientId: "",
   softwareId: "",
+  projectId: "",
   title: "",
   description: "",
   priority: "MEDIUM",
@@ -126,6 +130,10 @@ export default function TicketsPage() {
     setModalOpen(true);
   };
 
+  const projects = useJson<{ id: string; name: string }[]>(
+    modalOpen && form.clientId ? `/api/projects?clientId=${encodeURIComponent(form.clientId)}` : null
+  );
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.clientId || !form.softwareId || !form.title || !form.description) {
@@ -138,7 +146,7 @@ export default function TicketsPage() {
       const res = await fetch("/api/tickets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, projectId: form.projectId || null }),
       });
       if (!res.ok) {
         const data = await res.json();
@@ -217,6 +225,7 @@ export default function TicketsPage() {
                   <p className="text-sm font-semibold text-white leading-tight">{t.title}</p>
                   <p className="text-xs text-white/50 mt-0.5">
                     {t.client.companyName} · {t.software.name}
+                    {t.project ? ` · ${t.project.name}` : ""}
                   </p>
                 </div>
 
@@ -262,7 +271,7 @@ export default function TicketsPage() {
                   <label className="text-xs text-white/50 mb-1 block">Cliente *</label>
                   <select
                     value={form.clientId}
-                    onChange={(e) => setField("clientId", e.target.value)}
+                    onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value, projectId: "" }))}
                     className={selectClass}
                   >
                     <option value="" className="bg-black">Seleccionar cliente...</option>
@@ -273,6 +282,24 @@ export default function TicketsPage() {
                     ))}
                   </select>
                 </div>
+
+                {(projects.data?.length ?? 0) > 0 && (
+                  <div>
+                    <label className="text-xs text-white/50 mb-1 block">Proyecto</label>
+                    <select
+                      value={form.projectId}
+                      onChange={(e) => setField("projectId", e.target.value)}
+                      className={selectClass}
+                    >
+                      <option value="" className="bg-black">Sin proyecto</option>
+                      {(projects.data ?? []).map((p) => (
+                        <option key={p.id} value={p.id} className="bg-black">
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div>
                   <label className="text-xs text-white/50 mb-1 block">Software *</label>

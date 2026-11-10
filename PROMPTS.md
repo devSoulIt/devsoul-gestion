@@ -308,7 +308,7 @@ Todo consolidado en ARS y mobile-first.
 ### P6.2: Fidelización de clientes
 - **Estado:** [ ]
 - **Depende de:** P5.1
-- **Fecha:** · **Commit:** · **Notas:**
+- **Fecha:** · **Commit:** · **Notas:** `Client.lastContactAt` y `ClientInteraction` ya se hicieron en P7.3; falta NPS, alertas de renovación y health score.
 
 ```
 Agregá a Client lastContactAt y el modelo ClientInteraction (tipo, nota, fecha, usuario).
@@ -331,8 +331,154 @@ Ampliá el resumen que se inyecta en /api/ia/chat con:
 
 ---
 
+## Fase 7: Gestión de clientes
+
+> Proyectos por cliente con varios softwares, recordatorios internos del equipo y ficha completa del cliente. El resumen de esta versión está en `ACTUALIZACIONES.md` (v0.7).
+
+### P7.1: Proyectos y componentes
+- **Estado:** [x]
+- **Depende de:** P0.1
+- **Fecha:** 09/11/2026 · **Commit:** `a52b719` · **Notas:** Migración `20261109120000_projects_tasks_interactions`.
+  - Modelo: `Client → Project → ProjectComponent`. Un componente (WEB, MOBILE, BACKEND, ADMIN, INTEGRATION u OTHER) puede apuntar a un `Software` del catálogo y guarda la URL, el repo y notas. Las URLs se normalizan agregando `https://` si falta.
+  - `Contract.projectId` y `Ticket.projectId` son opcionales, así que los datos existentes no cambian. El proyecto se valida contra el cliente (400 si es de otro), con `findClientProject` de `lib/projects.ts`.
+  - Los proyectos tienen soft-delete. `DELETE` responde 409 si el proyecto tiene contratos activos; los componentes, en cambio, se borran físicamente porque no tienen dependencias.
+  - API:
+    - `/api/projects` (GET con `?clientId` y POST) y `/api/projects/[id]` (GET, PUT y DELETE).
+    - `/api/projects/[id]/components` (POST) y `/api/project-components/[id]` (PUT y DELETE).
+    - `PATCH /api/contracts/[id]` acepta `projectId`, para asignar contratos existentes a un proyecto.
+  - UI:
+    - Pestaña Proyectos de la ficha del cliente.
+    - Bloque "Contratos sin proyecto" con un selector para asignarlos.
+    - Selector de proyecto en los formularios de contratos y tickets.
+
+### P7.2: Recordatorios internos
+- **Estado:** [x]
+- **Depende de:** P1.1
+- **Fecha:** 09/11/2026 · **Commit:** `a52b719` · **Notas:**
+  - Modelo `Task` (en la UI, "Recordatorio"):
+    - Tipos: COLLECTION, MESSAGE, CALL, MEETING, RENEWAL, FOLLOW_UP y OTHER.
+    - Estados: PENDING, DONE y CANCELLED.
+    - Repetición: semanal, mensual o anual.
+    - Se puede vincular a un cliente, un proyecto o una factura. Si se indica el proyecto o la factura, el cliente se completa solo.
+    - Por defecto, el responsable es quien crea el recordatorio.
+  - Al completar un recordatorio que se repite, la próxima ocurrencia se crea en la misma transacción y siempre cae después de hoy.
+    - Si la fecha original es el último día del mes, se mantiene a fin de mes (31/01 → 28/02 → 31/03).
+    - Caso que no se cubre: un día 29 o 30 que cae en febrero queda corrido al 28 en las ocurrencias siguientes.
+    - Completar dos veces responde 409, así que no se duplican ocurrencias.
+  - `DELETE` no borra: marca el recordatorio como CANCELLED.
+  - Resumen diario por email (`lib/tasks/digest.ts`, `GET /api/cron/tasks` a las 11:00 UTC, que son las 8:00 ART):
+    - A cada responsable le llegan sus vencidos y los del día. Los recordatorios sin responsable van a todos los OWNER.
+    - Se usa la `Idempotency-Key` de Resend y `Task.notifiedAt` para no mandar el mismo resumen dos veces el mismo día.
+    - `APP_URL` (opcional) agrega al email el link "Ver recordatorios".
+  - UI:
+    - `/dashboard/recordatorios`: filtros "Míos / Todos" y "Pendientes / Vencidos / Hoy / 7 días / Hechos".
+    - Widget "Mis pendientes de la semana" en el dashboard.
+    - Botón para crear un recordatorio de cobro en las facturas vencidas, desde Facturación y desde la ficha del cliente.
+  - IA: el prompt incluye los recordatorios vencidos y los proyectos activos por cliente.
+  - No probado: un envío real del resumen, porque falta la cuenta de Resend. Con el email sin configurar, el cron responde `configured:false` y los resultados quedan en DRY_RUN.
+
+### P7.3: Ficha del cliente e historial de contacto
+- **Estado:** [x]
+- **Depende de:** P7.1, P7.2
+- **Fecha:** 09/11/2026 · **Commit:** `a52b719` · **Notas:**
+  - `GET /api/clients/[id]` devuelve la ficha agregada:
+    - Proyectos, contratos y tickets abiertos.
+    - Facturas pendientes (con `amountArs` y `overdue`) y las últimas 10 cobradas.
+    - Recordatorios pendientes y las últimas 30 interacciones.
+    - Un `summary` con los totales.
+  - `ClientInteraction` (llamada, email, WhatsApp, reunión o nota): `POST /api/clients/[id]/interactions` actualiza `Client.lastContactAt` solo si la interacción es más reciente que la última registrada. Rechaza fechas futuras.
+  - `/dashboard/clientes/[id]`:
+    - Header con email, teléfono y link a WhatsApp, más 4 KPIs.
+    - Pestañas: Proyectos, Recordatorios, Facturación, Tickets e Historial (timeline).
+  - Las tarjetas del listado de clientes muestran la cantidad de proyectos y de recordatorios pendientes, y "Ver ficha" lleva a la ficha.
+  - `GET /api/users` lista a los usuarios para elegir el responsable.
+  - Probado end-to-end en una base descartable con un script de 59 checks: validaciones cruzadas cliente/proyecto/factura, 409s, recurrencia, filtros, ficha, digest y páginas. También se revisó la UI en el navegador en desktop; no se pudo probar a 375px porque la ventana no se redimensionó.
+
+### P7.5: Etapas del cliente y redes sociales
+- **Estado:** [x]
+- **Depende de:** P7.3
+- **Fecha:** 09/11/2026 · **Commit:** `7c4c729` · **Notas:** Migración `20261109180000_client_stage_socials`.
+  - `Client.stage` (`PROSPECT` = posible cliente, cuando hubo un acercamiento o una reunión; `CLIENT` = ya estamos trabajando) y `convertedAt`. La migración pasa a todos los clientes existentes a `CLIENT`.
+  - Un cliente nuevo arranca por defecto como posible cliente. Pasa a `CLIENT` de alguna de estas formas:
+    - Automáticamente, al crearle el primer contrato (`POST /api/contracts`).
+    - A mano, con el botón "Pasar a cliente" de la ficha o desde la edición.
+    - Volver a posible cliente responde 409 si tiene contratos activos.
+  - `Client.email` pasa a ser opcional para los posibles clientes. Es obligatorio para la etapa `CLIENT` y para crear un contrato, porque los avisos de facturas salen por email. `lib/billing/reminders.ts` omite a los clientes sin email.
+  - Redes: `website`, `instagram`, `facebook`, `linkedin`, `tiktok` y `x`.
+    - Se acepta `@usuario`, el usuario solo o el link, y se guarda como URL (`normalizeSocial` en `lib/clients.ts`).
+    - Un valor solo se interpreta como link si trae `http` o una `/`, así que `clinica.sur` se toma como usuario.
+  - UI:
+    - Clientes: filtros "Todos / Posibles clientes / Clientes" con contadores, badge de etapa, redes en cada tarjeta y formulario con selector de etapa y sección de redes.
+    - Ficha: badge de etapa, redes, "Cliente desde…" y aviso con el botón "Pasar a cliente".
+    - Contratos: el selector marca "(posible cliente)" y avisa que al crear el contrato pasa a la etapa Cliente.
+  - El KPI "Clientes activos" del dashboard cuenta solo la etapa `CLIENT`.
+  - Probado: validación y normalización (19 casos) y smoke test de solo lectura contra la base de desarrollo, que no tiene usuarios porque el seed de P0.2 sigue pendiente.
+
+### P7.4: Bug de período en facturas de contratos nuevos
+- **Estado:** [ ]
+- **Depende de:** nada
+- **Fecha:** · **Commit:** · **Notas:** Se detectó al probar P7.
+
+```
+En app/api/contracts/route.ts, el período y los vencimientos de las facturas iniciales se calculan con getFullYear/getMonth/getDate en hora local sobre una fecha que llega como UTC ("2026-10-01" → 30/09 21:00 ART), así que un contrato que empieza el 01/10 genera una factura con período 2026-09.
+Usá los helpers de lib/dates.ts (hora argentina / UTC) para el período y las cuotas, y agregá una verificación.
+```
+
+---
+
+## Fase 8: App mobile y notificaciones push
+
+> Detalle y motivos en `ACTUALIZACIONES.md` (v0.8). Enfoque: PWA instalable con Web Push (VAPID), sin tiendas.
+
+### P8.1: PWA instalable
+- **Estado:** [~]
+- **Depende de:** nada
+- **Fecha:** 10/11/2026 · **Commit:** `8ea3cfe` · **Notas:**
+  - `app/manifest.ts` con shortcuts a Recordatorios, Facturación y Tickets. Íconos en `public/icons/`: 192, 512, maskable 512, apple-touch 180 y SVG (una "D" lima sobre negro, generados con sharp).
+  - `public/sw.js`: los HTML van a la red primero y caen en `public/offline.html` si no hay conexión; `/_next/static` e íconos usan cache-first; `/api` y los pedidos de otro origen no se tocan. Se registra desde `components/pwa/service-worker-registrar.tsx` en el layout del dashboard.
+  - Meta tags de iOS desde `metadata.appleWebApp` y `viewport` en `app/layout.tsx`. Next 16 emite `mobile-web-app-capable`, no la variante `apple-`; iOS 16.4+ usa `display: standalone` del manifest.
+  - Perfil → "App en el celular": botón "Instalar app" (`beforeinstallprompt`, guardado en `components/pwa/install-store.ts` porque puede dispararse antes de entrar a Perfil), guía para iPhone y aviso si ya está instalada.
+  - `proxy.ts` excluye `manifest.webmanifest`, `sw.js`, `offline.html` e `icons/`. `next.config.ts` agrega headers de seguridad y `no-cache` para `sw.js`.
+  - Deploy: `postinstall` y `vercel-build` (`prisma generate && prisma migrate deploy && next build`); pasos en README.
+  - Probado: `tsc`, eslint, `next build` y `next start`. Manifest, sw.js, offline e íconos responden 200 sin sesión y `/dashboard` sigue redirigiendo. Falta Lighthouse y probarlo en Android e iOS, que necesitan el deploy con HTTPS.
+
+```
+Leé la documentación de Next 16 en node_modules/next/dist/docs/ sobre manifest y metadata antes de codificar.
+Convertí el sistema en una PWA instalable:
+- app/manifest.ts: nombre "Devsoul Gestión", display standalone, fondo y theme #000000, íconos 192/512 y maskable con el logo en #bdf61d, y shortcuts a Recordatorios, Facturación y Tickets.
+- Service worker en public/sw.js, registrado desde el layout del dashboard: cachea el shell, muestra una página offline básica y no cachea /api.
+- Meta tags para iOS (apple-touch-icon, apple-mobile-web-app-capable, status bar black).
+- Botón "Instalar app" en Perfil (beforeinstallprompt) y una guía para iPhone (Compartir → Agregar a inicio).
+- proxy.ts no tiene que bloquear manifest, sw.js ni los íconos.
+Verificá con Lighthouse (PWA instalable) y probalo en Android y en iOS 16.4 o posterior.
+```
+
+### P8.2: Notificaciones push
+- **Estado:** [ ]
+- **Depende de:** P8.1, P7.2
+- **Fecha:** · **Commit:** · **Notas:**
+
+```
+Implementá Web Push con la librería web-push y claves VAPID (VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY y VAPID_SUBJECT; documentalas en README.md sin valores).
+- Modelo PushSubscription (userId, endpoint @unique, p256dh, auth, userAgent, createdAt, lastUsedAt) y NotificationPreference (userId, evento, canal: PUSH/EMAIL).
+- Agregá PUSH a NotificationChannel y un notifier push en lib/notifications que reciba el userId. Si el servicio responde 404 o 410, la suscripción se borra.
+- API: POST/DELETE /api/push/subscriptions y GET /api/push/public-key.
+- En el service worker: eventos push y notificationclick, que abren la URL del payload (recordatorio, factura o ticket).
+- Perfil → Notificaciones: activar o desactivar push en este dispositivo, probar el envío y elegir preferencias por evento.
+- Eventos:
+  - Recordatorio que vence hoy o está vencido: se suma al resumen de /api/cron/tasks.
+  - Recordatorio asignado por otro socio.
+  - Factura cobrada.
+  - Factura vencida: desde /api/cron/reminders, para OWNER y FINANCIAL.
+  - Ticket nuevo de prioridad alta.
+  - Facturas recurrentes generadas.
+- Los envíos tienen que ser idempotentes, igual que los emails. Registrá los envíos o reutilizá ReminderLog si encaja.
+```
+
+---
+
 ## Backlog de ideas (sin prompt todavía)
 
 - Integración con AFIP/ARCA para facturación electrónica.
-- PWA instalable en el celular.
+- App nativa (Capacitor o Expo) publicada en las tiendas, si más adelante se quiere una app para clientes.
 - Presupuesto mensual por categoría con alertas.

@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { TicketStatus, TicketPriority } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { findClientProject } from "@/lib/projects";
 
 const PRIORITY_ORDER: Record<string, number> = { HIGH: 0, MEDIUM: 1, LOW: 2 };
 
 type CreateTicketBody = {
   clientId: string;
   softwareId: string;
+  projectId?: string | null;
   title: string;
   description: string;
   priority: TicketPriority;
@@ -22,6 +24,7 @@ export async function GET(req: NextRequest) {
       include: {
         client: { select: { id: true, companyName: true } },
         software: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true } },
       },
     });
 
@@ -41,7 +44,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body: CreateTicketBody = await req.json();
-    const { clientId, softwareId, title, description, priority } = body;
+    const { clientId, softwareId, projectId, title, description, priority } = body;
 
     if (!clientId || !softwareId || !title || !description || !priority) {
       return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 });
@@ -59,11 +62,23 @@ export async function POST(req: NextRequest) {
     if (!client) return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
     if (!software) return NextResponse.json({ error: "Software no encontrado" }, { status: 404 });
 
+    const project = await findClientProject(projectId, clientId);
+    if (!project.ok) return NextResponse.json({ error: project.error }, { status: project.status });
+
     const ticket = await prisma.ticket.create({
-      data: { clientId, softwareId, title, description, priority, status: TicketStatus.OPEN },
+      data: {
+        clientId,
+        softwareId,
+        projectId: project.projectId,
+        title,
+        description,
+        priority,
+        status: TicketStatus.OPEN,
+      },
       include: {
         client: { select: { id: true, companyName: true } },
         software: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true } },
       },
     });
 

@@ -12,6 +12,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { TrendingUp, Clock, Users, AlertCircle } from "lucide-react";
+import { TodayTasks } from "./today-tasks";
 
 type DashboardMetrics = {
   ingresosMes: number;
@@ -66,6 +67,8 @@ export default function DashboardPage() {
           </div>
         ))}
       </div>
+
+      <TodayTasks />
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

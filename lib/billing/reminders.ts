@@ -68,6 +68,17 @@ export async function runReminders({ dryRun = false }: { dryRun?: boolean } = {}
     if (!kind) continue;
 
     const { client, software } = invoice.contract;
+    if (!client.email) {
+      result.outcomes.push({
+        invoiceId: invoice.id,
+        client: client.companyName,
+        kind,
+        recipient: "",
+        status: "SKIPPED",
+        detail: "El cliente no tiene email",
+      });
+      continue;
+    }
     const base = { invoiceId: invoice.id, client: client.companyName, kind, recipient: client.email };
     const existing = invoice.reminders.find((r) => r.kind === kind);
 

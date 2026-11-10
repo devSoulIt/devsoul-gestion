@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PaymentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { findClientProject } from "@/lib/projects";
 
 type UpdateContractBody = {
   active?: boolean;
   endDate?: string | null;
+  projectId?: string | null;
 };
 
 export async function PATCH(
@@ -20,10 +22,18 @@ export async function PATCH(
       return NextResponse.json({ error: "Contrato no encontrado" }, { status: 404 });
     }
 
+    if (body.projectId !== undefined) {
+      const project = await findClientProject(body.projectId, existing.clientId);
+      if (!project.ok) {
+        return NextResponse.json({ error: project.error }, { status: project.status });
+      }
+    }
+
     const updated = await prisma.contract.update({
       where: { id },
       data: {
         ...(body.active !== undefined && { active: body.active }),
+        ...(body.projectId !== undefined && { projectId: body.projectId || null }),
         ...(body.endDate !== undefined
           ? { endDate: body.endDate ? new Date(body.endDate) : null }
           : body.active === false && !existing.endDate
@@ -33,6 +43,7 @@ export async function PATCH(
       include: {
         client: { select: { id: true, companyName: true } },
         software: { select: { id: true, name: true } },
+        project: { select: { id: true, name: true } },
       },
     });
 

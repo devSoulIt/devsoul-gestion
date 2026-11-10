@@ -1,31 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
+import { ClientStage, Prisma, TaskStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-
-type CreateClientBody = {
-  companyName: string;
-  contactName: string;
-  email: string;
-  phone?: string;
-  status?: boolean;
-};
+import { parseClient, type ClientBody } from "@/lib/clients";
 
 export async function POST(req: NextRequest) {
   try {
-    const body: CreateClientBody = await req.json();
-    const { companyName, contactName, email, phone, status } = body;
+    const parsed = parseClient((await req.json()) as ClientBody, false);
+    if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: 400 });
 
-    if (!companyName || !contactName || !email) {
-      return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 });
+    const stage = parsed.data.stage ?? ClientStage.PROSPECT;
+    if (stage === ClientStage.CLIENT && !parsed.data.email) {
+      return NextResponse.json({ error: "Para registrarlo como cliente cargá el email" }, { status: 400 });
     }
 
     const client = await prisma.client.create({
       data: {
-        companyName,
-        contactName,
-        email,
-        phone: phone || null,
-        status: status ?? true,
+        ...parsed.data,
+        companyName: parsed.data.companyName!,
+        contactName: parsed.data.contactName!,
+        stage,
+        convertedAt: stage === ClientStage.CLIENT ? new Date() : null,
+        status: parsed.data.status ?? true,
       },
     });
 
@@ -39,16 +34,26 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const stageParam = req.nextUrl.searchParams.get("stage");
+    const stage =
+      stageParam && Object.values(ClientStage).includes(stageParam as ClientStage)
+        ? (stageParam as ClientStage)
+        : undefined;
+
     const clients = await prisma.client.findMany({
-      where: { deletedAt: null },
+      where: { deletedAt: null, ...(stage && { stage }) },
       include: {
         _count: {
-          select: { contracts: { where: { active: true, deletedAt: null } } },
+          select: {
+            contracts: { where: { active: true, deletedAt: null } },
+            projects: { where: { deletedAt: null } },
+            tasks: { where: { status: TaskStatus.PENDING } },
+          },
         },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ stage: "desc" }, { createdAt: "desc" }],
     });
 
     return NextResponse.json(clients);

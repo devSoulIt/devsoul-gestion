@@ -18,6 +18,7 @@ Sistema de gestión interna de Devsoul: clientes, softwares, contratos, facturac
    - `CRON_SECRET`: 16 caracteres o más. Protege los endpoints `/api/cron/*`.
    - `RESEND_API_KEY`, `EMAIL_FROM` y `EMAIL_REPLY_TO` (opcional): para los recordatorios por email.
    - `INVOICE_DUE_DAY`, `REMINDER_DAYS_BEFORE` y `REMINDER_DAYS_AFTER` (opcionales): por defecto 10, 3 y 7.
+   - `APP_URL` (opcional): la URL pública de la app. Se usa en el link del resumen diario de recordatorios.
    - `OPENAI_API_KEY`: para el chat de IA.
 
 3. Aplicar las migraciones y cargar los datos iniciales:
@@ -46,11 +47,12 @@ Sistema de gestión interna de Devsoul: clientes, softwares, contratos, facturac
 
 ## Automatizaciones (Vercel Cron)
 
-`vercel.json` programa dos tareas diarias. En el plan Hobby, Vercel puede ejecutarlas en cualquier momento dentro de la hora indicada.
+`vercel.json` programa tres tareas diarias. En el plan Hobby, Vercel puede ejecutarlas en cualquier momento dentro de la hora indicada.
 
 | Endpoint | Horario (UTC) | Qué hace |
 | --- | --- | --- |
 | `/api/cron/invoices` | 10:00 (7:00 ART) | Genera la factura del mes de cada contrato SaaS o de mantenimiento activo que no tenga una. Es idempotente, así que correrlo todos los días recupera las ejecuciones perdidas. |
+| `/api/cron/tasks` | 11:00 (8:00 ART) | Envía a cada socio un email con sus recordatorios vencidos y los del día. Los que no tienen responsable van a todos los `OWNER`. Sale una vez por día. |
 | `/api/cron/reminders` | 12:00 (9:00 ART) | Envía por email los recordatorios de facturas pendientes: 3 días antes del vencimiento, el día del vencimiento y 7 días después. Cada uno sale una sola vez por factura y los fallos se reintentan hasta 5 veces. |
 
 Para ponerlo en marcha en Vercel:
@@ -67,6 +69,31 @@ Para probar localmente:
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/invoices
 ```
+
+## Deploy en Vercel
+
+1. Crear una base PostgreSQL administrada (por ejemplo, Neon desde *Vercel → Storage*). Usar la URL con pooling en `DATABASE_URL`.
+2. Importar el repo en Vercel y cargar las variables de `.env.example` en *Project Settings → Environment Variables*. `APP_URL` es la URL final (por ejemplo, `https://devsoul-gestion.vercel.app`).
+3. El script `vercel-build` (`scripts/vercel-build.mjs`) genera el cliente de Prisma y compila. Solo en Production aplica las migraciones pendientes (`prisma migrate deploy`) y corre el seed. Los previews compilan sin base de datos.
+4. Los socios se crean en el primer deploy con las contraseñas de `SEED_PASSWORD_MARCE` y `SEED_PASSWORD_LAUTARO`. Si falta alguna, el build falla con un aviso. El seed nunca pisa una contraseña existente, así que después del primer login esas variables se pueden borrar y la contraseña se cambia desde **Perfil**.
+5. Dominio propio: en *Settings → Domains* agregar el subdominio (por ejemplo, `gestion.<dominio>`) y crear en el DNS un registro `CNAME` con el valor que indique Vercel.
+
+## App en el celular (PWA)
+
+El sistema se instala como app desde el navegador, sin tiendas. Necesita HTTPS, así que funciona en el deploy y no por IP local.
+
+- **Android (Chrome)**: entrar, iniciar sesión e ir a **Perfil → Instalar app**, o elegir "Instalar app" en el menú ⋮.
+- **iPhone (Safari, iOS 16.4 o posterior)**: Compartir → **Agregar a inicio**.
+
+La app abre en `/dashboard` a pantalla completa, con accesos directos a Recordatorios, Facturación y Tickets (mantener apretado el ícono en Android). Sin conexión muestra una pantalla de reintento; los datos siempre se piden al servidor y `/api` nunca se cachea.
+
+## Clientes, proyectos y recordatorios
+
+- **Etapas**: un cliente se registra como **posible cliente** (hubo un acercamiento o una reunión) o como **cliente** (ya estamos trabajando). Pasa a cliente solo al cargarle el primer contrato, o a mano desde la ficha. El email es obligatorio solo para los clientes.
+- **Redes sociales**: web, Instagram, Facebook, LinkedIn, TikTok y X. Se puede cargar `@usuario` o el link completo.
+- **Proyectos**: cada cliente tiene proyectos, y cada proyecto, varios softwares o componentes (web, app móvil, backend, panel admin, integraciones). Un componente puede apuntar a un software del catálogo. Los contratos y los tickets se pueden asociar a un proyecto.
+- **Ficha del cliente** (Clientes → Ver ficha): proyectos, recordatorios, facturación, tickets e historial de contacto.
+- **Recordatorios**: tareas internas del equipo, como cobrar, escribir, llamar o renovar. Tienen responsable, fecha y repetición opcional. Se ven en la sección Recordatorios, en el dashboard y en la ficha de cada cliente.
 
 ## Roles
 

@@ -29,7 +29,7 @@ Sos el Lead Fullstack Developer de **Devsoul**, una startup de desarrollo de sof
 
 
 ## Hoja de ruta
-El backlog con prompts y su estado está en `PROMPTS.md`. Al iniciar una sesión, leelo y continuá con el próximo prompt pendiente; al terminar uno, actualizá su estado, fecha y commit.
+El backlog con prompts y su estado está en `PROMPTS.md`. Al iniciar una sesión, leelo y continuá con el próximo prompt pendiente; al terminar uno, actualizá su estado, fecha y commit. Las versiones grandes y la visión de producto (por ejemplo, la app mobile con notificaciones push) se resumen en `ACTUALIZACIONES.md`; actualizalo al cerrar una fase.
 
 ## Resumen
 - El sistema es para tener el control de la empresa de devosul, principalmente se busca tener un control de los clientes y los softwares que se tienen contratados, los tickets, la facturacion y el manejo de la propia empresa con estadisticas y proyecciones.
