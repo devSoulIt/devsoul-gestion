@@ -433,7 +433,7 @@ Usá los helpers de lib/dates.ts (hora argentina / UTC) para el período y las c
 ### P8.1: PWA instalable
 - **Estado:** [~]
 - **Depende de:** nada
-- **Fecha:** 10/11/2026 · **Commit:** · **Notas:**
+- **Fecha:** 10/11/2026 · **Commit:** `8ea3cfe` · **Notas:**
   - `app/manifest.ts` con shortcuts a Recordatorios, Facturación y Tickets. Íconos en `public/icons/`: 192, 512, maskable 512, apple-touch 180 y SVG (una "D" lima sobre negro, generados con sharp).
   - `public/sw.js`: los HTML van a la red primero y caen en `public/offline.html` si no hay conexión; `/_next/static` e íconos usan cache-first; `/api` y los pedidos de otro origen no se tocan. Se registra desde `components/pwa/service-worker-registrar.tsx` en el layout del dashboard.
   - Meta tags de iOS desde `metadata.appleWebApp` y `viewport` en `app/layout.tsx`. Next 16 emite `mobile-web-app-capable`, no la variante `apple-`; iOS 16.4+ usa `display: standalone` del manifest.
