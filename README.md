@@ -74,7 +74,7 @@ curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/invo
 
 1. Crear una base PostgreSQL administrada (por ejemplo, Neon desde *Vercel → Storage*). Usar la URL con pooling en `DATABASE_URL`.
 2. Importar el repo en Vercel y cargar las variables de `.env.example` en *Project Settings → Environment Variables*. `APP_URL` es la URL final (por ejemplo, `https://devsoul-gestion.vercel.app`).
-3. El script `vercel-build` genera el cliente de Prisma, aplica las migraciones pendientes (`prisma migrate deploy`), corre el seed y compila. Las migraciones se aplican sobre la base configurada en ese entorno, así que los deploys de preview tienen que apuntar a otra base o no tener `DATABASE_URL`.
+3. El script `vercel-build` (`scripts/vercel-build.mjs`) genera el cliente de Prisma y compila. Solo en Production aplica las migraciones pendientes (`prisma migrate deploy`) y corre el seed. Los previews compilan sin base de datos.
 4. Los socios se crean en el primer deploy con las contraseñas de `SEED_PASSWORD_MARCE` y `SEED_PASSWORD_LAUTARO`. Si falta alguna, el build falla con un aviso. El seed nunca pisa una contraseña existente, así que después del primer login esas variables se pueden borrar y la contraseña se cambia desde **Perfil**.
 5. Dominio propio: en *Settings → Domains* agregar el subdominio (por ejemplo, `gestion.<dominio>`) y crear en el DNS un registro `CNAME` con el valor que indique Vercel.
 
