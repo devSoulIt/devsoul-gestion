@@ -9,6 +9,7 @@ type UpdateAccountBody = {
   openingBalance?: number;
   openingDate?: string;
   active?: boolean;
+  earnsYield?: boolean;
 };
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -35,6 +36,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ...(body.openingBalance !== undefined && { openingBalance: body.openingBalance }),
         ...(body.openingDate && { openingDate: new Date(body.openingDate) }),
         ...(body.active !== undefined && { active: body.active }),
+        ...(typeof body.earnsYield === "boolean" && { earnsYield: body.earnsYield }),
       },
     });
 
