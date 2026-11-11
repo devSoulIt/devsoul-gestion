@@ -9,6 +9,7 @@ import { Button } from "@heroui/react/button";
 export default function IAChatPage() {
   const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
     api: "/api/ia/chat",
+    streamProtocol: "text",
   });
 
   const bottomRef = useRef<HTMLDivElement>(null);
