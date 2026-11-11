@@ -16,6 +16,7 @@ const CATEGORIES: Record<"INCOME" | "EXPENSE", string[]> = {
     "Infraestructura",
     "Impuestos",
     "Herramientas/SaaS",
+    "Suscripciones IA",
     "Comisiones bancarias",
     "Marketing",
     "Servicios",
@@ -79,10 +80,31 @@ async function seedAccounts() {
   console.log("✔ Cuentas financieras");
 }
 
+async function seedDefaultSplit() {
+  const existing = await prisma.splitShare.count({ where: { contractId: null } });
+  if (existing > 0) return;
+
+  const users = await prisma.user.findMany({
+    where: { email: { in: PARTNERS.map((p) => p.email) } },
+    select: { id: true, email: true },
+  });
+  if (users.length !== PARTNERS.length) return;
+
+  const byEmail = new Map(users.map((u) => [u.email, u.id]));
+  await prisma.splitShare.createMany({
+    data: [
+      ...PARTNERS.map((p) => ({ contractId: null, userId: byEmail.get(p.email)!, percent: 33.33 })),
+      { contractId: null, userId: null, percent: 33.34 },
+    ],
+  });
+  console.log("✔ Reparto por defecto (33,33% / 33,33% / 33,34%)");
+}
+
 async function main() {
   await seedCategories();
   await seedAccounts();
   await seedUsers();
+  await seedDefaultSplit();
 }
 
 main()

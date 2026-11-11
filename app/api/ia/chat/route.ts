@@ -33,6 +33,7 @@ export async function POST(req: NextRequest) {
         where: { status: PaymentStatus.PENDING },
       }),
       prisma.invoice.findMany({
+        where: { status: { not: PaymentStatus.CANCELLED } },
         select: {
           amount: true,
           currency: true,

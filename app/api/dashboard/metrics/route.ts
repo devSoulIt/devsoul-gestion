@@ -26,7 +26,7 @@ export async function GET() {
         prisma.client.count({ where: { status: true, deletedAt: null, stage: "CLIENT" } }),
         prisma.ticket.count({ where: { status: TicketStatus.OPEN } }),
         prisma.invoice.findMany({
-          where: { dueDate: { gte: sixMonthsAgo } },
+          where: { status: { not: PaymentStatus.CANCELLED }, dueDate: { gte: sixMonthsAgo } },
           select: {
             amount: true,
             currency: true,
@@ -41,6 +41,7 @@ export async function GET() {
           },
         }),
         prisma.invoice.findMany({
+          where: { status: { not: PaymentStatus.CANCELLED } },
           select: {
             amount: true,
             currency: true,

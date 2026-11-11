@@ -4,11 +4,13 @@ import { prisma } from "@/lib/prisma";
 import { FINANCIAL_ROLES, requireRole } from "@/lib/auth/session";
 import { INVOICE_CATEGORY_NAME, buildLedgerEntry, parseAmount, parseDate } from "@/lib/finance/ledger";
 import { RateUnavailableError, getRateToArs } from "@/lib/finance/rates";
+import { buildPayouts, getSplitFor, parseShares } from "@/lib/finance/splits";
 
 type PayInvoiceBody = {
   accountId?: string;
   paymentDate?: string;
   amountReceived?: number;
+  shares?: unknown;
 };
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -23,11 +25,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (!invoice) {
       return NextResponse.json({ error: "Factura no encontrada" }, { status: 404 });
     }
-    if (invoice.status === PaymentStatus.PAID) {
-      return NextResponse.json({ error: "La factura ya fue cobrada" }, { status: 400 });
+    if (invoice.status !== PaymentStatus.PENDING) {
+      return NextResponse.json(
+        { error: invoice.status === PaymentStatus.PAID ? "La factura ya fue cobrada" : "La factura está cancelada" },
+        { status: 400 }
+      );
     }
     if (!body.accountId) {
       return NextResponse.json({ error: "Indicá la cuenta donde ingresó el cobro" }, { status: 400 });
+    }
+
+    let shares = await getSplitFor(invoice.contractId);
+    if (body.shares !== undefined) {
+      const parsed = await parseShares(body.shares);
+      if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+      shares = parsed.shares;
     }
 
     const account = await prisma.financialAccount.findFirst({ where: { id: body.accountId, active: true } });
@@ -73,7 +85,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       });
       if (count === 0) throw new Error("ALREADY_PAID");
       await tx.transaction.create({ data: entry });
-      return tx.invoice.findUniqueOrThrow({ where: { id } });
+      await tx.payout.createMany({
+        data: buildPayouts(
+          id,
+          { amount: Number(entry.amount), currency: entry.currency, rateToArs: Number(entry.rateToArs) },
+          shares
+        ),
+      });
+      return tx.invoice.findUniqueOrThrow({ where: { id }, include: { payouts: true } });
     });
 
     return NextResponse.json(updated);

@@ -2,11 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { PaymentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { findClientProject } from "@/lib/projects";
+import { requireRole } from "@/lib/auth/session";
+import { parseShares, replaceSplit, type ShareInput } from "@/lib/finance/splits";
+import { parsePaymentDay } from "@/lib/billing/payment-day";
 
 type UpdateContractBody = {
   active?: boolean;
   endDate?: string | null;
   projectId?: string | null;
+  paymentDay?: number | string | null;
+  shares?: unknown;
 };
 
 export async function PATCH(
@@ -14,6 +19,9 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireRole();
+    if (!auth.ok) return auth.response;
+
     const { id } = await params;
     const body: UpdateContractBody = await req.json();
 
@@ -29,22 +37,44 @@ export async function PATCH(
       }
     }
 
-    const updated = await prisma.contract.update({
-      where: { id },
-      data: {
-        ...(body.active !== undefined && { active: body.active }),
-        ...(body.projectId !== undefined && { projectId: body.projectId || null }),
-        ...(body.endDate !== undefined
-          ? { endDate: body.endDate ? new Date(body.endDate) : null }
-          : body.active === false && !existing.endDate
-            ? { endDate: new Date() }
-            : {}),
-      },
-      include: {
-        client: { select: { id: true, companyName: true } },
-        software: { select: { id: true, name: true } },
-        project: { select: { id: true, name: true } },
-      },
+    let paymentDay: number | null | undefined;
+    if (body.paymentDay !== undefined) {
+      const parsed = parsePaymentDay(body.paymentDay);
+      if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+      paymentDay = parsed.value;
+    }
+
+    let shares: ShareInput[] | null | undefined;
+    if (body.shares !== undefined) {
+      if (body.shares === null) shares = null;
+      else {
+        const parsed = await parseShares(body.shares);
+        if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+        shares = parsed.shares;
+      }
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      if (shares !== undefined) await replaceSplit(tx, id, shares);
+      return tx.contract.update({
+        where: { id },
+        data: {
+          ...(paymentDay !== undefined && { paymentDay }),
+          ...(body.active !== undefined && { active: body.active }),
+          ...(body.projectId !== undefined && { projectId: body.projectId || null }),
+          ...(body.endDate !== undefined
+            ? { endDate: body.endDate ? new Date(body.endDate) : null }
+            : body.active === false && !existing.endDate
+              ? { endDate: new Date() }
+              : {}),
+        },
+        include: {
+          client: { select: { id: true, companyName: true } },
+          software: { select: { id: true, name: true } },
+          project: { select: { id: true, name: true } },
+          splitShares: { select: { userId: true, percent: true }, orderBy: { createdAt: "asc" } },
+        },
+      });
     });
 
     return NextResponse.json(updated);
