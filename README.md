@@ -46,6 +46,8 @@ Sistema de gestión interna de Devsoul: clientes, softwares, contratos, facturac
 - **Reparto entre socios**: cada cobro se divide según el reparto del contrato o el de por defecto (Finanzas → Configuración), y se puede ajustar al cobrar. La parte de cada socio queda en **Finanzas → Socios** hasta que se marca como pagada; ese pago baja el saldo de la cuenta, pero no cuenta como gasto de la empresa.
 - **Gastos fijos** (Finanzas → Gastos fijos): suscripciones y pagos mensuales o anuales. El día del vencimiento aparecen como "a pagar" para confirmarlos, o se registran solos si tienen activado "registrar automático".
 - **Día de pago y atrasos**: cada contrato puede definir el día del mes en que tiene que llegar el pago. Facturación muestra los días de atraso y permite cancelar una factura indicando el motivo.
+- **Ajustar saldo** (botón en cada cuenta): se carga el saldo real de hoy y la diferencia se registra como rendimiento (ingreso), gasto no registrado (egreso) o ajuste neutro, que corrige el saldo sin afectar el resultado. Cada cuenta muestra cuándo se ajustó por última vez.
+- **Rendimiento diario**: en las cuentas marcadas como remuneradas (Finanzas → Configuración), el botón "Rendimiento" carga lo que rindió ese día. Hay un registro por cuenta y día: si se vuelve a cargar, se reemplaza.
 - **USD**: cada movimiento en dólares guarda la cotización del día, que se obtiene de una API pública o se carga a mano. Todos los reportes se consolidan en ARS.
 
 ## Automatizaciones (Vercel Cron)

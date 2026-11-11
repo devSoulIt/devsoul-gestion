@@ -10,6 +10,7 @@ type CreateAccountBody = {
   currency: Currency;
   openingBalance?: number;
   openingDate: string;
+  earnsYield?: boolean;
 };
 
 export async function GET(req: NextRequest) {
@@ -27,7 +28,7 @@ export async function POST(req: NextRequest) {
     const auth = await requireRole(FINANCIAL_ROLES);
     if (!auth.ok) return auth.response;
 
-    const { name, provider, currency, openingBalance, openingDate }: CreateAccountBody = await req.json();
+    const { name, provider, currency, openingBalance, openingDate, earnsYield }: CreateAccountBody = await req.json();
 
     if (!name?.trim() || !provider || !currency || !openingDate) {
       return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 });
@@ -46,6 +47,7 @@ export async function POST(req: NextRequest) {
         currency,
         openingBalance: openingBalance ?? 0,
         openingDate: new Date(openingDate),
+        earnsYield: earnsYield === true,
       },
     });
 

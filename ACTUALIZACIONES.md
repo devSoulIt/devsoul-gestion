@@ -6,6 +6,15 @@ Estados: 🟢 terminado · 🟡 en curso · ⚪ planificado
 
 ---
 
+## 🟡 v0.10: Saldo real y rendimiento diario
+
+**Objetivo:** que los saldos del sistema coincidan con lo que hay en Ualá aunque no esté conectado.
+
+- **Ajustar saldo:** se carga el dinero que hay hoy en la cuenta y el sistema muestra la diferencia. En cada ajuste se elige si la diferencia es rendimiento (ingreso), un gasto no registrado (egreso) o un ajuste neutro.
+- **Rendimiento diario:** un campo rápido para cargar lo que rindió la cuenta remunerada cada día, con el total del mes y un aviso si falta cargar el de hoy.
+
+---
+
 ## 🟡 v0.9: Cobros, reparto entre socios y gastos fijos
 
 **Objetivo:** saber cuándo tiene que entrar cada pago, cuánto le toca a cada socio y qué gastos salen todos los meses, sin cargarlos a mano.
@@ -83,4 +92,5 @@ El sistema ya es mobile-first, así que lo más rápido y barato es convertirlo 
 | 🟢 v0.4 | 25/09/2026 | Facturación recurrente y recordatorios de vencimiento por email. |
 | 🟢 v0.7 | 09/11/2026 | Proyectos, recordatorios internos y ficha del cliente. |
 | 🟡 v0.9 | 11/11/2026 | Día de pago, atrasos, cancelación, reparto entre socios y gastos fijos (en `develop`). |
+| 🟡 v0.10 | 11/11/2026 | Ajuste de saldo real y rendimiento diario (en `develop`). |
 | ⚪ v0.8 | — | PWA y notificaciones push. |

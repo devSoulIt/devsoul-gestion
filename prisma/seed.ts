@@ -10,7 +10,7 @@ const PARTNERS = [
 ];
 
 const CATEGORIES: Record<"INCOME" | "EXPENSE", string[]> = {
-  INCOME: ["Factura cobrada", "Otros ingresos"],
+  INCOME: ["Factura cobrada", "Rendimientos", "Otros ingresos"],
   EXPENSE: [
     "Sueldos",
     "Infraestructura",
@@ -20,11 +20,12 @@ const CATEGORIES: Record<"INCOME" | "EXPENSE", string[]> = {
     "Comisiones bancarias",
     "Marketing",
     "Servicios",
+    "Gasto no registrado",
     "Otros egresos",
   ],
 };
 
-const ACCOUNTS = [{ name: "Ualá ARS", provider: AccountProvider.UALA, currency: Currency.ARS }];
+const ACCOUNTS = [{ name: "Ualá ARS", provider: AccountProvider.UALA, currency: Currency.ARS, earnsYield: true }];
 
 async function seedUsers() {
   for (const partner of PARTNERS) {

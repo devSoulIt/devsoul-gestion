@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { openai } from "@ai-sdk/openai";
 import { streamText, type CoreMessage } from "ai";
-import { OccurrenceStatus, PaymentStatus, PayoutStatus, ProjectStatus, TaskStatus, TransactionType } from "@prisma/client";
+import { OccurrenceStatus, PaymentStatus, PayoutStatus, ProjectStatus, TaskStatus, TransactionSource, TransactionType } from "@prisma/client";
 import { delayDays } from "@/lib/billing/delay";
 import { prisma } from "@/lib/prisma";
 import { getAccountBalances } from "@/lib/finance/balances";
@@ -83,7 +83,14 @@ export async function POST(req: NextRequest) {
     const pendingN = pendingInvoices.length;
     const accountLines = balances.accounts.length
       ? balances.accounts
-          .map((a) => `  - ${a.name}: ${a.balance.toLocaleString("es-AR")} ${a.currency}${a.currency === "ARS" ? "" : ` (≈ ${fmt(a.balanceArs ?? 0)})`}`)
+          .map(
+            (a) =>
+              `  - ${a.name}: ${a.balance.toLocaleString("es-AR")} ${a.currency}${a.currency === "ARS" ? "" : ` (≈ ${fmt(a.balanceArs ?? 0)})`}${
+                a.reconciledAt
+                  ? `, saldo verificado contra el real el ${a.reconciledAt.toLocaleDateString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })}`
+                  : ", saldo nunca verificado contra el real"
+              }${a.earnsYield ? ", cuenta remunerada" : ""}`
+          )
           .join("\n")
       : "  (Sin cuentas registradas)";
 
@@ -91,7 +98,7 @@ export async function POST(req: NextRequest) {
       ? top3.map(([name, total], i) => `  ${i + 1}. ${name}: ${fmt(total)}`).join("\n")
       : "  (Sin datos)";
 
-    const [lateInvoices, partnerDebt, fixedExpenses, pendingExpenses] = await Promise.all([
+    const [lateInvoices, partnerDebt, fixedExpenses, pendingExpenses, yieldAgg] = await Promise.all([
       prisma.invoice.findMany({
         where: { status: PaymentStatus.PENDING, dueDate: { lt: today } },
         select: {
@@ -115,6 +122,10 @@ export async function POST(req: NextRequest) {
         select: { name: true, amount: true, currency: true, frequency: true },
       }),
       prisma.expenseOccurrence.count({ where: { status: OccurrenceStatus.PENDING } }),
+      prisma.transaction.aggregate({
+        where: { source: TransactionSource.YIELD, date: { gte: startOfMonth } },
+        _sum: { amountArs: true },
+      }),
     ]);
     const partnerNames = new Map(
       (await prisma.user.findMany({ select: { id: true, name: true } })).map((u) => [u.id, u.name])
@@ -162,6 +173,7 @@ ${accountLines}
 - Ingresos del mes: ${fmt(ingresos)}
 - Egresos del mes: ${fmt(egresos)}
 - Balance neto del mes: ${fmt(ingresos - egresos)}
+- Rendimientos de cuentas remuneradas en el mes (incluidos en ingresos): ${fmt(Number(yieldAgg._sum.amountArs ?? 0))}
 - Facturas pendientes de cobro: ${fmt(pending)} (${pendingN} facturas)
 - Top 3 softwares por facturación histórica:
 ${topLines}

@@ -6,8 +6,11 @@ import { FinanceTabs } from "@/components/finance/finance-tabs";
 import { Button } from "@heroui/react/button";
 import {
   ArrowLeftRight,
+  Percent,
   Plus,
+  Scale,
   Settings2,
+  Sparkles,
   Trash2,
   TrendingDown,
   TrendingUp,
@@ -16,25 +19,42 @@ import {
 import { useJson } from "@/lib/hooks/use-json";
 import { formatAmount, formatDate, lastMonths } from "@/lib/format";
 import { MovementModal } from "./movement-modal";
+import { AdjustBalanceModal } from "./adjust-balance-modal";
+import { YieldModal } from "./yield-modal";
 import { TransferModal } from "./transfer-modal";
 import {
   PROVIDER_LABELS,
   SOURCE_LABELS,
   selectClass,
+  type Account,
   type AccountsResponse,
   type Category,
   type TransactionRow,
   type TransactionsResponse,
+  type YieldResponse,
 } from "./types";
 
 const MONTH_OPTIONS = lastMonths(12);
 const PAGE_SIZE = 20;
+const STALE_DAYS = 7;
+const DAY_MS = 86_400_000;
+
+function reconciledLabel(reconciledAt: string | null) {
+  if (!reconciledAt) return { text: "Sin ajustar", stale: true };
+  const days = Math.floor((Date.now() - new Date(reconciledAt).getTime()) / DAY_MS);
+  return {
+    text: days === 0 ? "Ajustado hoy" : days === 1 ? "Ajustado ayer" : `Ajustado hace ${days} días`,
+    stale: days > STALE_DAYS,
+  };
+}
 
 type Filters = { type: string; accountId: string; categoryId: string; month: string };
 
 export default function FinanzasPage() {
   const [filters, setFilters] = useState<Filters>({ type: "", accountId: "", categoryId: "", month: "" });
   const [modal, setModal] = useState<"movement" | "transfer" | null>(null);
+  const [adjusting, setAdjusting] = useState<Account | null>(null);
+  const [yieldAccountId, setYieldAccountId] = useState<string | null>(null);
   const [more, setMore] = useState<{ key: string; page: number; rows: TransactionRow[] }>({
     key: "",
     page: 1,
@@ -45,6 +65,7 @@ export default function FinanzasPage() {
 
   const accountsQ = useJson<AccountsResponse>("/api/accounts");
   const categoriesQ = useJson<Category[]>("/api/categories");
+  const yieldQ = useJson<YieldResponse>("/api/accounts/yield");
 
   const params = new URLSearchParams({ limit: String(PAGE_SIZE) });
   (Object.entries(filters) as [keyof Filters, string][]).forEach(([k, v]) => v && params.set(k, v));
@@ -60,7 +81,10 @@ export default function FinanzasPage() {
   const reloadAll = () => {
     accountsQ.reload();
     txQ.reload();
+    yieldQ.reload();
   };
+  const yieldAccounts = yieldQ.data?.accounts ?? [];
+  const missingToday = yieldAccounts.filter((a) => a.todayAmount === null);
 
   const setFilter = (key: keyof Filters, value: string) => setFilters((f) => ({ ...f, [key]: value }));
 
@@ -148,25 +172,51 @@ export default function FinanzasPage() {
               {accountsQ.data ? formatAmount(accountsQ.data.totalArs) : "—"}
             </p>
           </div>
-          {accounts.map((a) => (
-            <button
-              key={a.id}
-              onClick={() => setFilter("accountId", filters.accountId === a.id ? "" : a.id)}
-              className={`glass rounded-xl p-4 min-w-[180px] snap-start text-left transition-colors ${
-                filters.accountId === a.id ? "border-acento-lima/50" : "hover:border-white/20"
-              }`}
-            >
-              <p className="text-xs text-white/40">
-                {a.name} · {PROVIDER_LABELS[a.provider]}
-              </p>
-              <p className={`text-lg font-semibold ${a.balance < 0 ? "text-red-400" : "text-white"}`}>
-                {formatAmount(a.balance, a.currency)}
-              </p>
-              {a.currency !== "ARS" && a.balanceArs !== null && (
-                <p className="text-xs text-white/40">≈ {formatAmount(a.balanceArs)}</p>
-              )}
-            </button>
-          ))}
+          {accounts.map((a) => {
+            const rec = reconciledLabel(a.reconciledAt);
+            return (
+              <div
+                key={a.id}
+                className={`glass rounded-xl min-w-[200px] snap-start transition-colors flex flex-col ${
+                  filters.accountId === a.id ? "border-acento-lima/50" : "hover:border-white/20"
+                }`}
+              >
+                <button
+                  onClick={() => setFilter("accountId", filters.accountId === a.id ? "" : a.id)}
+                  className="text-left px-4 pt-4 pb-2 flex-1"
+                >
+                  <p className="text-xs text-white/40">
+                    {a.name} · {PROVIDER_LABELS[a.provider]}
+                  </p>
+                  <p className={`text-lg font-semibold ${a.balance < 0 ? "text-red-400" : "text-white"}`}>
+                    {formatAmount(a.balance, a.currency)}
+                  </p>
+                  {a.currency !== "ARS" && a.balanceArs !== null && (
+                    <p className="text-xs text-white/40">≈ {formatAmount(a.balanceArs)}</p>
+                  )}
+                  <p className={`text-[11px] mt-1 ${rec.stale ? "text-amber-400" : "text-white/40"}`}>{rec.text}</p>
+                </button>
+                <div className="flex border-t border-white/10 text-xs">
+                  <button
+                    onClick={() => setAdjusting(a)}
+                    className="flex-1 flex items-center justify-center gap-1 py-2 text-white/60 hover:text-white hover:bg-white/5 rounded-bl-xl"
+                  >
+                    <Scale size={13} />
+                    Ajustar saldo
+                  </button>
+                  {a.earnsYield && (
+                    <button
+                      onClick={() => setYieldAccountId(a.id)}
+                      className="flex-1 flex items-center justify-center gap-1 py-2 text-acento-lima/80 hover:text-acento-lima hover:bg-white/5 border-l border-white/10 rounded-br-xl"
+                    >
+                      <Percent size={13} />
+                      Rendimiento
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
           {accountsQ.data && accounts.length === 0 && (
             <Link
               href="/dashboard/finanzas/configuracion"
@@ -177,6 +227,34 @@ export default function FinanzasPage() {
           )}
         </div>
       </section>
+
+      {yieldAccounts.length > 0 && (
+        <div className="glass rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Sparkles size={20} className="text-acento-lima" />
+            <div>
+              <p className="text-xs text-white/40">Rendimientos del mes</p>
+              <p className="text-lg font-semibold text-acento-lima">{formatAmount(yieldQ.data?.totalArs ?? 0)}</p>
+            </div>
+          </div>
+          {missingToday.length > 0 ? (
+            <button
+              onClick={() => setYieldAccountId(missingToday[0].id)}
+              className="flex items-center justify-center gap-1.5 text-sm text-amber-300 border border-amber-400/30 bg-amber-400/10 rounded-lg px-3 py-2 hover:bg-amber-400/20 transition-colors"
+            >
+              <Percent size={14} />
+              Cargar el rendimiento de hoy{missingToday.length > 1 ? ` (${missingToday.length} cuentas)` : ""}
+            </button>
+          ) : (
+            <p className="text-xs text-white/50">
+              Hoy:{" "}
+              {yieldAccounts
+                .map((a) => `${a.name} ${formatAmount(a.todayAmount ?? 0, a.currency)}`)
+                .join(" · ")}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Resumen */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -198,6 +276,7 @@ export default function FinanzasPage() {
           <option value="INCOME" className="bg-black">Ingresos</option>
           <option value="EXPENSE" className="bg-black">Egresos</option>
           <option value="TRANSFER" className="bg-black">Transferencias</option>
+          <option value="ADJUSTMENT" className="bg-black">Ajustes</option>
         </FilterSelect>
         <FilterSelect label="Cuenta" value={filters.accountId} onChange={(v) => setFilter("accountId", v)}>
           <option value="" className="bg-black">Todas</option>
@@ -270,6 +349,19 @@ export default function FinanzasPage() {
         accounts={accounts}
         onSaved={reloadAll}
       />
+      <AdjustBalanceModal
+        account={adjusting}
+        categories={categories}
+        onClose={() => setAdjusting(null)}
+        onSaved={reloadAll}
+      />
+      <YieldModal
+        accountId={yieldAccountId}
+        accounts={accounts.filter((a) => a.earnsYield)}
+        data={yieldQ.data ?? undefined}
+        onClose={() => setYieldAccountId(null)}
+        onSaved={reloadAll}
+      />
     </div>
   );
 }
@@ -295,6 +387,8 @@ function FilterSelect({
   );
 }
 
+const DELETABLE_SOURCES: TransactionRow["source"][] = ["MANUAL", "TRANSFER", "ADJUSTMENT", "YIELD"];
+
 function TransactionItem({
   tx,
   confirming,
@@ -305,15 +399,24 @@ function TransactionItem({
   onDelete: () => void;
 }) {
   const isTransfer = tx.type === "TRANSFER_IN" || tx.type === "TRANSFER_OUT";
-  const positive = tx.type === "INCOME" || tx.type === "TRANSFER_IN";
-  const color = isTransfer ? "text-sky-400" : positive ? "text-green-400" : "text-red-400";
-  const Icon = isTransfer ? ArrowLeftRight : positive ? TrendingUp : TrendingDown;
-  const deletable = tx.source === "MANUAL" || tx.source === "TRANSFER";
+  const isAdjustment = tx.type === "ADJUSTMENT_IN" || tx.type === "ADJUSTMENT_OUT";
+  const positive = tx.type === "INCOME" || tx.type === "TRANSFER_IN" || tx.type === "ADJUSTMENT_IN";
+  const color = isTransfer
+    ? "text-sky-400"
+    : isAdjustment
+      ? "text-white/60"
+      : positive
+        ? "text-green-400"
+        : "text-red-400";
+  const Icon = isTransfer ? ArrowLeftRight : isAdjustment ? Scale : positive ? TrendingUp : TrendingDown;
+  const deletable = DELETABLE_SOURCES.includes(tx.source);
   const title = isTransfer
     ? tx.type === "TRANSFER_IN"
       ? "Transferencia recibida"
       : "Transferencia enviada"
-    : tx.category?.name ?? "Sin categoría";
+    : isAdjustment
+      ? "Ajuste de saldo"
+      : tx.category?.name ?? "Sin categoría";
 
   return (
     <div className="glass rounded-xl px-4 py-3 flex items-center justify-between gap-3">

@@ -53,6 +53,8 @@ enum TransactionType {
   TRANSFER_IN
   TRANSFER_OUT
   PARTNER_PAYOUT
+  ADJUSTMENT_IN
+  ADJUSTMENT_OUT
 }
 
 enum AccountProvider {
@@ -70,6 +72,8 @@ enum TransactionSource {
   UALA_WEBHOOK
   PAYOUT
   RECURRING_EXPENSE
+  ADJUSTMENT
+  YIELD
 }
 
 enum RateSource {
@@ -292,6 +296,9 @@ model FinancialAccount {
   openingBalance    Decimal            @default(0) @db.Decimal(14, 2)
   openingDate       DateTime
   active            Boolean            @default(true)
+  earnsYield        Boolean            @default(false)
+  reconciledAt      DateTime?
+  reconciledBalance Decimal?           @db.Decimal(14, 2)
   transactions      Transaction[]
   recurringExpenses RecurringExpense[]
   createdAt         DateTime           @default(now())

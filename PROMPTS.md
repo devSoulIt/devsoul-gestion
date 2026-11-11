@@ -205,6 +205,20 @@ Leé la documentación de https://developers.ualabis.com.ar (API Cobros Online v
 - Probar primero contra el entorno stage.
 ```
 
+### P3.3: Ajuste de saldo real y rendimiento diario (alternativa manual)
+- **Estado:** [x]
+- **Depende de:** P2.1
+- **Fecha:** 11/11/2026 · **Commit:** `5de249a`, `6686022` · **Notas:** Migración `20261111194040_balance_adjustments_daily_yield`. Mientras no exista P3.1/P3.2, mantiene los saldos alineados con la realidad sin integración.
+  - `POST /api/accounts/[id]/reconcile` con `{ realBalance, treatment, categoryId? }`: calcula la diferencia contra el saldo del sistema y la registra según el tratamiento elegido. `YIELD` crea un INCOME "Rendimientos" y solo acepta diferencias positivas. `EXPENSE` crea un egreso con categoría (por defecto "Gasto no registrado") y solo acepta diferencias negativas. `ADJUSTMENT` crea `ADJUSTMENT_IN/OUT`, que mueve el saldo sin contar en ingresos ni egresos. Además guarda `reconciledAt` y `reconciledBalance` en la cuenta y marca `reconciled = true` en los movimientos hasta esa fecha. El `GET` es la vista previa de la diferencia.
+  - `PUT /api/accounts/[id]/yield`: rendimiento diario cargado a mano, uno por cuenta y día (`externalId = yield:{cuenta}:{fecha}`). Si se vuelve a cargar, se reemplaza; con 0 se borra. `GET /api/accounts/yield` devuelve los rendimientos del mes y si ya se cargó el de hoy.
+  - `FinancialAccount.earnsYield`: marca la cuenta como remunerada. La migración marca Ualá ARS.
+  - UI de Finanzas:
+    - Cada tarjeta de cuenta muestra "Ajustado hace X días" (en ámbar si pasaron más de 7) y los botones "Ajustar saldo" y "Rendimiento".
+    - Tarjeta "Rendimientos del mes" con el aviso "Cargar el rendimiento de hoy".
+    - Filtro "Ajustes" en la lista de movimientos. Los ajustes y rendimientos se pueden borrar para deshacerlos.
+  - La IA recibe el rendimiento del mes y cuándo se verificó por última vez cada saldo.
+  - Probado: 32 checks de API contra una base descartable (los 3 tratamientos, validación de signo, diferencia 0, deshacer, rendimiento diario idempotente, cuenta USD con cotización) y revisión en el navegador en desktop y a 394px de ancho.
+
 ---
 
 ## Fase 4: Automatización

@@ -38,9 +38,11 @@ export async function GET(req: NextRequest) {
     const typeFilter: Prisma.TransactionWhereInput =
       type === "TRANSFER"
         ? { type: { in: [TransactionType.TRANSFER_IN, TransactionType.TRANSFER_OUT] } }
-        : type && Object.values(TransactionType).includes(type as TransactionType)
-          ? { type: type as TransactionType }
-          : {};
+        : type === "ADJUSTMENT"
+          ? { type: { in: [TransactionType.ADJUSTMENT_IN, TransactionType.ADJUSTMENT_OUT] } }
+          : type && Object.values(TransactionType).includes(type as TransactionType)
+            ? { type: type as TransactionType }
+            : {};
 
     const where: Prisma.TransactionWhereInput = {
       ...typeFilter,
