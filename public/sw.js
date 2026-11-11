@@ -1,4 +1,4 @@
-const VERSION = "v2";
+const VERSION = "v3";
 const SHELL_CACHE = `devsoul-shell-${VERSION}`;
 const STATIC_CACHE = `devsoul-static-${VERSION}`;
 const OFFLINE_URL = "/offline.html";
