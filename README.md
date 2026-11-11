@@ -43,15 +43,19 @@ Sistema de gestión interna de Devsoul: clientes, softwares, contratos, facturac
 - **Cuentas** (Finanzas → Configuración): dónde está el dinero (Ualá, banco, efectivo). El saldo de cada cuenta es su saldo inicial más la suma de sus movimientos. Al empezar, cargá en "Ualá ARS" el saldo real y la fecha desde la que registrás movimientos.
 - **Movimientos**: cada ingreso o egreso pertenece a una cuenta y a una categoría. Al marcar una factura como cobrada se crea el ingreso automáticamente en la cuenta que elijas.
 - **Transferencias**: mueven dinero entre cuentas, incluso de ARS a USD. No cuentan como ingreso ni egreso.
+- **Reparto entre socios**: cada cobro se divide según el reparto del contrato o el de por defecto (Finanzas → Configuración), y se puede ajustar al cobrar. La parte de cada socio queda en **Finanzas → Socios** hasta que se marca como pagada; ese pago baja el saldo de la cuenta, pero no cuenta como gasto de la empresa.
+- **Gastos fijos** (Finanzas → Gastos fijos): suscripciones y pagos mensuales o anuales. El día del vencimiento aparecen como "a pagar" para confirmarlos, o se registran solos si tienen activado "registrar automático".
+- **Día de pago y atrasos**: cada contrato puede definir el día del mes en que tiene que llegar el pago. Facturación muestra los días de atraso y permite cancelar una factura indicando el motivo.
 - **USD**: cada movimiento en dólares guarda la cotización del día, que se obtiene de una API pública o se carga a mano. Todos los reportes se consolidan en ARS.
 
 ## Automatizaciones (Vercel Cron)
 
-`vercel.json` programa tres tareas diarias. En el plan Hobby, Vercel puede ejecutarlas en cualquier momento dentro de la hora indicada.
+`vercel.json` programa cuatro tareas diarias. En el plan Hobby, Vercel puede ejecutarlas en cualquier momento dentro de la hora indicada.
 
 | Endpoint | Horario (UTC) | Qué hace |
 | --- | --- | --- |
 | `/api/cron/invoices` | 10:00 (7:00 ART) | Genera la factura del mes de cada contrato SaaS o de mantenimiento activo que no tenga una. Es idempotente, así que correrlo todos los días recupera las ejecuciones perdidas. |
+| `/api/cron/expenses` | 10:30 (7:30 ART) | Crea los gastos fijos que vencen hoy: quedan "a pagar" o, si tienen "registrar automático", se cargan como egreso. Es idempotente. |
 | `/api/cron/tasks` | 11:00 (8:00 ART) | Envía a cada socio un email con sus recordatorios vencidos y los del día. Los que no tienen responsable van a todos los `OWNER`. Sale una vez por día. |
 | `/api/cron/reminders` | 12:00 (9:00 ART) | Envía por email los recordatorios de facturas pendientes: 3 días antes del vencimiento, el día del vencimiento y 7 días después. Cada uno sale una sola vez por factura y los fallos se reintentan hasta 5 veces. |
 

@@ -147,6 +147,26 @@ Creá una función getRate(date) que tome la cotización del día (API pública 
 Todos los reportes y el resumen de la IA tienen que consolidar en ARS.
 ```
 
+### P2.3: Cobros: día de pago, atrasos y cancelación
+- **Estado:** [x]
+- **Depende de:** P2.1, P4.1
+- **Fecha:** 11/11/2026 · **Commit:** `d0de901`, `203b943` · **Notas:** Migración `20261111174259_payments_splits_recurring_expenses`.
+  - `Contract.paymentDay` (1–31): día del mes en que tiene que llegar el pago. Lo usan la facturación recurrente y las cuotas de los contratos nuevos. Sin valor, se usa `INVOICE_DUE_DAY`.
+  - `PATCH /api/invoices/[id]/due-date` cambia la fecha de una factura pendiente puntual.
+  - Atraso: `delayDays` (`lib/billing/delay.ts`). En pendientes, los días desde el vencimiento hasta hoy; en cobradas, los días entre el vencimiento y el cobro. `GET /api/invoices` lo devuelve y acepta `status=OVERDUE`.
+  - `PaymentStatus.CANCELLED`: `POST /api/invoices/[id]/cancel` con motivo obligatorio. Guarda quién canceló y cuándo. Solo se cancelan pendientes (409 si ya está cobrada). Las canceladas no reciben avisos ni cuentan en métricas ni en la IA.
+  - UI de Facturación: badge de estado, "X días de atraso" o "Cobrada con X días de atraso", filtros "Con atraso" y "Canceladas", y acciones para cambiar la fecha y cancelar con motivos rápidos.
+  - También corrige el formato de fechas de Facturación, que mostraba un día menos por la zona horaria.
+
+### P2.4: Reparto de cada cobro entre socios y empresa
+- **Estado:** [x]
+- **Depende de:** P2.3
+- **Fecha:** 11/11/2026 · **Commit:** `d0de901`, `203b943` · **Notas:**
+  - `SplitShare`: con `contractId` en null es el reparto por defecto (el seed carga 33,33 / 33,33 / 33,34); con contrato es el reparto propio. Con `userId` en null es la empresa. La suma tiene que dar 100 (`lib/finance/splits.ts`).
+  - Al cobrar, el modal precarga el reparto del contrato o el de por defecto, se puede editar para ese cobro y se crean los `Payout`: PENDING para cada socio y RETAINED para la empresa (absorbe el redondeo).
+  - `POST /api/payouts/[id]/pay` registra un `Transaction` `PARTNER_PAYOUT`: baja el saldo de la cuenta pero no suma a los egresos del mes.
+  - UI: Finanzas → Socios (total a pagar por socio, pendientes e historial), Finanzas → Configuración → Reparto por defecto, y en Contratos el botón "Día de pago y reparto".
+
 ---
 
 ## Fase 3: Integración con Ualá
@@ -246,6 +266,17 @@ Enviar recordatorios por email (Resend o SMTP; proponé uno) 3 días antes del v
 - Dejar preparada una interfaz para sumar WhatsApp más adelante.
 - Ejecutarlo desde el mismo sistema de cron que P4.1.
 ```
+
+### P4.3: Gastos fijos recurrentes
+- **Estado:** [x]
+- **Depende de:** P2.1
+- **Fecha:** 11/11/2026 · **Commit:** `d0de901`, `203b943` · **Notas:**
+  - `RecurringExpense` (mensual o anual, día, cuenta, categoría y "registrar automático") y `ExpenseOccurrence` única por gasto y período.
+  - Cron `GET /api/cron/expenses` a las 10:30 UTC: crea la ocurrencia el día del vencimiento. Con "registrar automático", carga el egreso en el momento; si no, queda "a pagar" hasta que se confirma (con monto editable) o se omite con motivo.
+  - La moneda del gasto tiene que coincidir con la de la cuenta. Los gastos en USD toman la cotización del día al confirmarse.
+  - UI: Finanzas → Gastos fijos y el widget "A pagar" del dashboard, que también muestra lo que se le debe a cada socio.
+  - La IA recibe las facturas con atraso, lo pendiente a cada socio y los gastos fijos.
+  - Probado: 36 checks de API contra una base descartable (reparto, redondeo, atrasos, cancelación, pagos a socios, saldos, cron idempotente, autoRecord y P7.4) y revisión en el navegador en desktop. La vista a 375px no se pudo probar acá; queda para el preview de `develop`.
 
 ---
 
@@ -415,9 +446,9 @@ Ampliá el resumen que se inyecta en /api/ia/chat con:
   - Probado: validación y normalización (19 casos) y smoke test de solo lectura contra la base de desarrollo, que no tiene usuarios porque el seed de P0.2 sigue pendiente.
 
 ### P7.4: Bug de período en facturas de contratos nuevos
-- **Estado:** [ ]
+- **Estado:** [x]
 - **Depende de:** nada
-- **Fecha:** · **Commit:** · **Notas:** Se detectó al probar P7.
+- **Fecha:** 11/11/2026 · **Commit:** `d0de901` · **Notas:** Se detectó al probar P7. Las fechas se calculan en UTC con `periodDueDate`; verificado que un contrato del 2026-10-01 genera el período 2026-10.
 
 ```
 En app/api/contracts/route.ts, el período y los vencimientos de las facturas iniciales se calculan con getFullYear/getMonth/getDate en hora local sobre una fecha que llega como UTC ("2026-10-01" → 30/09 21:00 ART), así que un contrato que empieza el 01/10 genera una factura con período 2026-09.
