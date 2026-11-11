@@ -21,6 +21,7 @@ import {
 import { Avatar } from "@heroui/react/avatar";
 import { Dropdown } from "@heroui/react/dropdown";
 import { logout } from "@/app/actions/auth";
+import { Isotipo } from "@/components/brand/isotipo";
 
 export type ShellUser = { name: string; role: string };
 
@@ -92,9 +93,12 @@ export function DashboardShell({
       >
         {/* Logo */}
         <div className="flex h-16 items-center justify-between px-5 border-b border-white/10">
-          <span className="text-xl font-bold text-acento-lima tracking-tight">
-            Devsoul
-          </span>
+          <Link href="/dashboard" className="flex items-center gap-2.5">
+            <Isotipo className="h-8 w-auto text-acento-lima" />
+            <span className="text-xl font-bold text-white tracking-tight">
+              Devsoul
+            </span>
+          </Link>
           <button
             className="p-1 text-white/50 hover:text-white md:hidden"
             onClick={() => setSidebarOpen(false)}
@@ -150,6 +154,7 @@ export function DashboardShell({
             >
               <Menu size={20} />
             </button>
+            <Isotipo className="h-6 w-auto text-acento-lima md:hidden" />
             <span className="text-sm font-semibold text-white">
               {currentSection}
             </span>

@@ -1,8 +1,8 @@
-const VERSION = "v1";
+const VERSION = "v2";
 const SHELL_CACHE = `devsoul-shell-${VERSION}`;
 const STATIC_CACHE = `devsoul-static-${VERSION}`;
 const OFFLINE_URL = "/offline.html";
-const SHELL_ASSETS = [OFFLINE_URL, "/icons/icon-192.png", "/icons/icon-512.png", "/icons/icon.svg"];
+const SHELL_ASSETS = [OFFLINE_URL, "/icons/icon-192.png", "/icons/icon-512.png", "/icons/icon.svg", "/brand/isotipo.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL_ASSETS)));
