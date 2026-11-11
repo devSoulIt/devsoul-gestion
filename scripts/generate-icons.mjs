@@ -8,32 +8,32 @@ const LOGO_H = 2017;
 const PATHS =
   '<path d="M0 0H1878L1482 402H941L1482 1008L585 2017H0L895 1008Z"/><path d="M0 707L266 1008L0 1306Z"/>';
 
-function iconSvg({ size, logoRatio, radius }) {
+function iconSvg({ size, logoRatio, radius = 0, background = null }) {
   const h = size * logoRatio;
   const scale = h / LOGO_H;
   const w = LOGO_W * scale;
   const x = (size - w) / 2;
   const y = (size - h) / 2;
-  const r = size * radius;
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><rect width="${size}" height="${size}" rx="${r}" fill="#000"/><g transform="translate(${x.toFixed(2)} ${y.toFixed(2)}) scale(${scale.toFixed(5)})" fill="#bdf61d">${PATHS}</g></svg>`;
+  const bg = background ? `<rect width="${size}" height="${size}" rx="${size * radius}" fill="${background}"/>` : "";
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">${bg}<g transform="translate(${x.toFixed(2)} ${y.toFixed(2)}) scale(${scale.toFixed(5)})" fill="#bdf61d">${PATHS}</g></svg>`;
 }
 
 const png = (svg) => sharp(Buffer.from(svg)).png().toBuffer();
 
-const favicon = iconSvg({ size: 512, logoRatio: 0.8, radius: 0.18 });
+const favicon = iconSvg({ size: 512, logoRatio: 0.92 });
 await writeFile(new URL("icon.svg", ICONS_DIR), favicon + "\n");
 
 const targets = [
-  ["icon-192.png", iconSvg({ size: 192, logoRatio: 0.7, radius: 0 })],
-  ["icon-512.png", iconSvg({ size: 512, logoRatio: 0.7, radius: 0 })],
-  ["icon-maskable-512.png", iconSvg({ size: 512, logoRatio: 0.56, radius: 0 })],
-  ["apple-touch-icon.png", iconSvg({ size: 180, logoRatio: 0.66, radius: 0 })],
+  ["icon-192.png", iconSvg({ size: 192, logoRatio: 0.84 })],
+  ["icon-512.png", iconSvg({ size: 512, logoRatio: 0.84 })],
+  ["icon-maskable-512.png", iconSvg({ size: 512, logoRatio: 0.56, background: "#000" })],
+  ["apple-touch-icon.png", iconSvg({ size: 180, logoRatio: 0.66, background: "#000" })],
 ];
 for (const [name, svg] of targets) await writeFile(new URL(name, ICONS_DIR), await png(svg));
 
 const icoSizes = [16, 32, 48];
 const icoImages = await Promise.all(
-  icoSizes.map((s) => png(iconSvg({ size: s, logoRatio: 0.84, radius: 0.18 }))),
+  icoSizes.map((s) => png(iconSvg({ size: s, logoRatio: 0.94 }))),
 );
 const header = Buffer.alloc(6 + 16 * icoSizes.length);
 header.writeUInt16LE(0, 0);
