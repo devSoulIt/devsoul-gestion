@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Currency, PaymentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { delayDays } from "@/lib/billing/delay";
+import { businessDateKey } from "@/lib/dates";
 
 type CreateInvoiceBody = {
   contractId: string;
@@ -61,7 +63,12 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const status = searchParams.get("status") as PaymentStatus | null;
+    const statusParam = searchParams.get("status");
+    const overdueOnly = statusParam === "OVERDUE";
+    const status = Object.values(PaymentStatus).includes(statusParam as PaymentStatus)
+      ? (statusParam as PaymentStatus)
+      : null;
+    const today = businessDateKey();
     const period = searchParams.get("period");
     const clientId = searchParams.get("clientId");
     const page = Math.max(1, parseInt(searchParams.get("page") ?? "1"));
@@ -70,6 +77,7 @@ export async function GET(req: NextRequest) {
 
     const where = {
       ...(status ? { status } : {}),
+      ...(overdueOnly ? { status: PaymentStatus.PENDING, dueDate: { lt: new Date(`${today}T00:00:00Z`) } } : {}),
       ...(period ? { period: { contains: period } } : {}),
       ...(clientId ? { contract: { clientId } } : {}),
     };
@@ -82,6 +90,7 @@ export async function GET(req: NextRequest) {
             include: {
               client: { select: { id: true, companyName: true } },
               software: { select: { id: true, name: true } },
+              splitShares: { select: { userId: true, percent: true }, orderBy: { createdAt: "asc" } },
             },
           },
           reminders: {
@@ -89,6 +98,11 @@ export async function GET(req: NextRequest) {
             select: { kind: true, sentAt: true },
             orderBy: { sentAt: "desc" },
           },
+          payouts: {
+            select: { id: true, userId: true, percent: true, amount: true, currency: true, status: true, paidAt: true },
+            orderBy: { createdAt: "asc" },
+          },
+          cancelledBy: { select: { name: true } },
         },
         orderBy: [{ status: "asc" }, { dueDate: "asc" }],
         skip,
@@ -98,7 +112,7 @@ export async function GET(req: NextRequest) {
     ]);
 
     return NextResponse.json({
-      data,
+      data: data.map((invoice) => ({ ...invoice, delayDays: delayDays(invoice, today) })),
       total,
       page,
       totalPages: Math.ceil(total / limit),

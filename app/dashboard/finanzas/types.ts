@@ -1,7 +1,14 @@
 import type { CurrencyCode } from "@/lib/format";
 
-export type TxType = "INCOME" | "EXPENSE" | "TRANSFER_IN" | "TRANSFER_OUT";
-export type TxSource = "MANUAL" | "INVOICE" | "TRANSFER" | "UALA_IMPORT" | "UALA_WEBHOOK";
+export type TxType = "INCOME" | "EXPENSE" | "TRANSFER_IN" | "TRANSFER_OUT" | "PARTNER_PAYOUT";
+export type TxSource =
+  | "MANUAL"
+  | "INVOICE"
+  | "TRANSFER"
+  | "UALA_IMPORT"
+  | "UALA_WEBHOOK"
+  | "PAYOUT"
+  | "RECURRING_EXPENSE";
 export type Provider = "UALA" | "BANK" | "CASH" | "OTHER";
 
 export type Account = {
@@ -67,6 +74,8 @@ export const SOURCE_LABELS: Record<TxSource, string> = {
   TRANSFER: "Transferencia",
   UALA_IMPORT: "Import Ualá",
   UALA_WEBHOOK: "Ualá Bis",
+  PAYOUT: "Pago a socio",
+  RECURRING_EXPENSE: "Gasto fijo",
 };
 
 export const selectClass =

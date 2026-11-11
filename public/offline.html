@@ -9,7 +9,7 @@
     html, body { margin: 0; height: 100%; background: #000; color: #fff; font-family: system-ui, -apple-system, sans-serif; }
     main { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 24px; box-sizing: border-box; }
     .card { max-width: 360px; width: 100%; text-align: center; padding: 32px 24px; border-radius: 16px; background: rgba(255,255,255,.05); border: 1px solid rgba(255,255,255,.1); }
-    img { width: 64px; height: 64px; border-radius: 16px; }
+    img { width: auto; height: 64px; }
     h1 { font-size: 20px; margin: 20px 0 8px; }
     p { color: rgba(255,255,255,.6); font-size: 14px; line-height: 1.5; margin: 0 0 24px; }
     button { background: #bdf61d; color: #000; border: 0; border-radius: 10px; padding: 12px 20px; font-weight: 600; font-size: 15px; width: 100%; }
@@ -18,7 +18,7 @@
 <body>
   <main>
     <div class="card">
-      <img src="/icons/icon.svg" alt="Devsoul" />
+      <img src="/brand/isotipo.svg" alt="Devsoul" />
       <h1>Sin conexión</h1>
       <p>No pudimos conectarnos con el servidor. Revisá tu conexión e intentá de nuevo.</p>
       <button onclick="location.reload()">Reintentar</button>

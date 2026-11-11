@@ -5,8 +5,16 @@ import { Chip } from "@heroui/react/chip";
 import { Input } from "@heroui/react/input";
 import { Button } from "@heroui/react/button";
 import { Modal } from "@heroui/react";
-import { Plus, FileSignature, Power } from "lucide-react";
+import { Plus, FileSignature, Power, SlidersHorizontal } from "lucide-react";
 import { useJson } from "@/lib/hooks/use-json";
+import {
+  SplitEditor,
+  normalizeSplit,
+  splitIsValid,
+  type DefaultSplitResponse,
+  type SplitShare,
+} from "@/components/finance/split-editor";
+import { ContractBillingModal, type BillableContract } from "./contract-billing-modal";
 
 type ContractRow = {
   id: string;
@@ -19,6 +27,8 @@ type ContractRow = {
   client: { id: string; companyName: string };
   software: { id: string; name: string };
   project: { id: string; name: string } | null;
+  paymentDay: number | null;
+  splitShares: { userId: string | null; percent: string }[];
   _count: { invoices: number };
 };
 
@@ -34,6 +44,8 @@ type FormState = {
   currency: "ARS" | "USD";
   installmentsCount: string;
   startDate: string;
+  paymentDay: string;
+  customSplit: boolean;
 };
 
 const TYPE_LABEL: Record<ContractRow["type"], string> = {
@@ -51,6 +63,8 @@ const EMPTY_FORM: FormState = {
   currency: "ARS",
   installmentsCount: "1",
   startDate: new Date().toISOString().slice(0, 10),
+  paymentDay: "",
+  customSplit: false,
 };
 
 function formatAmount(amount: string | number, currency: "ARS" | "USD") {
@@ -66,6 +80,7 @@ function formatDate(iso: string) {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
+    timeZone: "UTC",
   });
 }
 
@@ -84,6 +99,8 @@ export default function ContratosPage() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  const [editedSplit, setEditedSplit] = useState<SplitShare[] | null>(null);
+  const [billing, setBilling] = useState<BillableContract | null>(null);
 
   const load = async () => {
     try {
@@ -105,6 +122,10 @@ export default function ContratosPage() {
       setSoftwares(Array.isArray(sws) ? sws : []);
     });
   }, []);
+
+  const splitQ = useJson<DefaultSplitResponse>(modalOpen ? "/api/splits/default" : null);
+  const splitUsers = splitQ.data?.users ?? [];
+  const formSplit = editedSplit ?? normalizeSplit(splitQ.data?.shares, splitUsers);
 
   const projects = useJson<{ id: string; name: string }[]>(
     modalOpen && form.clientId ? `/api/projects?clientId=${encodeURIComponent(form.clientId)}` : null
@@ -129,6 +150,7 @@ export default function ContratosPage() {
 
   const openCreate = () => {
     setForm({ ...EMPTY_FORM, startDate: new Date().toISOString().slice(0, 10) });
+    setEditedSplit(null);
     setFormError(null);
     setModalOpen(true);
   };
@@ -149,6 +171,15 @@ export default function ContratosPage() {
       setFormError("Indicá la cantidad de cuotas.");
       return;
     }
+    const day = form.paymentDay ? Number(form.paymentDay) : null;
+    if (day !== null && (!Number.isInteger(day) || day < 1 || day > 31)) {
+      setFormError("El día de pago tiene que estar entre 1 y 31.");
+      return;
+    }
+    if (form.customSplit && !splitIsValid(formSplit)) {
+      setFormError("El reparto tiene que sumar 100%.");
+      return;
+    }
     setSaving(true);
     setFormError(null);
     try {
@@ -164,6 +195,8 @@ export default function ContratosPage() {
           currency: form.currency,
           installmentsCount: Number(form.installmentsCount),
           startDate: form.startDate,
+          paymentDay: day,
+          shares: form.customSplit ? formSplit : null,
         }),
       });
       if (!res.ok) {
@@ -267,6 +300,10 @@ export default function ContratosPage() {
                   Desde {formatDate(c.startDate)}
                   {c.endDate ? ` · hasta ${formatDate(c.endDate)}` : ""}
                 </p>
+                <p className="text-xs text-white/40">
+                  {c.paymentDay ? `Paga el día ${c.paymentDay}` : "Paga el día 10"}
+                  {c.splitShares.length > 0 && <span className="text-acento-lima/70"> · reparto propio</span>}
+                </p>
               </div>
 
               <div className="flex items-center gap-2">
@@ -280,7 +317,21 @@ export default function ContratosPage() {
                 )}
               </div>
 
-              <div className="flex justify-end md:justify-center">
+              <div className="flex justify-end md:justify-center gap-3">
+                <button
+                  onClick={() =>
+                    setBilling({
+                      id: c.id,
+                      label: `${c.client.companyName} · ${c.software.name}`,
+                      paymentDay: c.paymentDay,
+                      splitShares: c.splitShares,
+                    })
+                  }
+                  title="Día de pago y reparto"
+                  className="text-white/40 hover:text-acento-lima transition-colors"
+                >
+                  <SlidersHorizontal size={18} />
+                </button>
                 <button
                   onClick={() => toggleActive(c)}
                   disabled={togglingId === c.id}
@@ -448,6 +499,33 @@ export default function ContratosPage() {
                       className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-acento-lima/50 transition-colors [color-scheme:dark]"
                     />
                   </div>
+
+                  <div>
+                    <label className="text-xs text-white/50 mb-1 block">Día de pago del mes</label>
+                    <Input
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      max={31}
+                      value={form.paymentDay}
+                      onChange={(e) => setField("paymentDay", e.target.value)}
+                      placeholder="Por defecto: día 10"
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-acento-lima/50 transition-colors"
+                    />
+                  </div>
+
+                  <label className="flex items-center gap-2 text-sm text-white/80 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={form.customSplit}
+                      onChange={(e) => setField("customSplit", e.target.checked)}
+                      className="accent-[#bdf61d]"
+                    />
+                    Reparto propio (si no, usa el reparto por defecto)
+                  </label>
+                  {form.customSplit && splitUsers.length > 0 && (
+                    <SplitEditor shares={formSplit} users={splitUsers} onChange={setEditedSplit} />
+                  )}
                 </Modal.Body>
                 <Modal.Footer className="px-6 pb-6 pt-2 flex justify-end gap-2">
                   <button
@@ -470,6 +548,8 @@ export default function ContratosPage() {
           </Modal.Container>
         </Modal.Backdrop>
       </Modal>
+
+      <ContractBillingModal contract={billing} onClose={() => setBilling(null)} onSaved={load} />
     </div>
   );
 }

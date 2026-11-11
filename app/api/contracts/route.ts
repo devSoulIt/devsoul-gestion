@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { ClientStage, ContractType, Currency, PaymentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { findClientProject } from "@/lib/projects";
+import { parsePaymentDay } from "@/lib/billing/payment-day";
+import { dueDateKey, periodDueDate } from "@/lib/dates";
+import { parseShares, replaceSplit, type ShareInput } from "@/lib/finance/splits";
 
 type CreateContractBody = {
   clientId: string;
@@ -12,7 +15,18 @@ type CreateContractBody = {
   currency: Currency;
   installmentsCount: number;
   startDate: string;
+  paymentDay?: number | string | null;
+  shares?: unknown;
 };
+
+const monthPeriod = (d: Date) => dueDateKey(d).slice(0, 7);
+
+function addMonthsUtc(start: Date, months: number, day: number) {
+  const y = start.getUTCFullYear();
+  const m = start.getUTCMonth() + months;
+  const period = monthPeriod(new Date(Date.UTC(y, m, 1)));
+  return periodDueDate(period, day);
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -59,9 +73,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: project.error }, { status: project.status });
     }
 
-    const start = new Date(startDate);
-    const monthPeriod = (d: Date) =>
-      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    const startKey = String(startDate).slice(0, 10);
+    const start = new Date(`${startKey}T00:00:00Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startKey) || Number.isNaN(start.getTime())) {
+      return NextResponse.json({ error: "Fecha de inicio inválida" }, { status: 400 });
+    }
+
+    const day = parsePaymentDay(body.paymentDay);
+    if (!day.ok) return NextResponse.json({ error: day.error }, { status: 400 });
+    const paymentDay = day.value;
+
+    let shares: ShareInput[] | null = null;
+    if (body.shares !== undefined && body.shares !== null) {
+      const parsed = await parseShares(body.shares);
+      if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+      shares = parsed.shares;
+    }
 
     const result = await prisma.$transaction(async (tx) => {
       if (client.stage === ClientStage.PROSPECT) {
@@ -72,19 +99,25 @@ export async function POST(req: NextRequest) {
       }
 
       const contract = await tx.contract.create({
-        data: { clientId, softwareId, projectId: project.projectId, type, totalAmount, currency, startDate: start },
+        data: {
+          clientId,
+          softwareId,
+          projectId: project.projectId,
+          type,
+          totalAmount,
+          currency,
+          startDate: start,
+          paymentDay,
+        },
       });
+      if (shares) await replaceSplit(tx, contract.id, shares);
 
       if (type === ContractType.CUSTOM_DEVELOPMENT) {
         const installmentAmount = parseFloat((totalAmount / installmentsCount).toFixed(2));
 
         const invoices = await Promise.all(
           Array.from({ length: installmentsCount }, (_, i) => {
-            const dueDate = new Date(
-              start.getFullYear(),
-              start.getMonth() + i,
-              start.getDate()
-            );
+            const dueDate = addMonthsUtc(start, i, paymentDay ?? start.getUTCDate());
             return tx.invoice.create({
               data: {
                 contractId: contract.id,
@@ -102,11 +135,12 @@ export async function POST(req: NextRequest) {
       }
 
       const period = monthPeriod(start);
+      const scheduled = paymentDay ? periodDueDate(period, paymentDay) : start;
       const invoice = await tx.invoice.create({
         data: {
           contractId: contract.id,
           amount: totalAmount,
-          dueDate: start,
+          dueDate: scheduled < start ? start : scheduled,
           status: PaymentStatus.PENDING,
           currency,
           period,
@@ -141,6 +175,7 @@ export async function GET(req: NextRequest) {
         client: true,
         software: true,
         project: { select: { id: true, name: true } },
+        splitShares: { select: { userId: true, percent: true }, orderBy: { createdAt: "asc" } },
         _count: {
           select: { invoices: { where: { status: PaymentStatus.PENDING } } },
         },

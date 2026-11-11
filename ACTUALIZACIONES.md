@@ -6,6 +6,17 @@ Estados: 🟢 terminado · 🟡 en curso · ⚪ planificado
 
 ---
 
+## 🟡 v0.9: Cobros, reparto entre socios y gastos fijos
+
+**Objetivo:** saber cuándo tiene que entrar cada pago, cuánto le toca a cada socio y qué gastos salen todos los meses, sin cargarlos a mano.
+
+- **Día de pago y atrasos:** cada contrato define el día del mes en que tiene que llegar el pago, y cada factura muestra cuántos días de atraso tiene (o con cuánto atraso se cobró).
+- **Cancelación con motivo:** una factura puede cancelarse indicando el motivo; queda en el historial pero deja de contar como pendiente.
+- **Reparto entre socios:** cada cobro se divide entre Marce, Lautaro y la empresa (33 % cada uno por defecto, editable por contrato o en el momento del cobro). La parte de cada socio queda "a pagar" hasta que se transfiere.
+- **Gastos fijos:** suscripciones y pagos recurrentes (por ejemplo, Claude) se generan solos el día del vencimiento y se confirman con un toque, o se registran automáticamente.
+
+---
+
 ## 🟢 v0.7: Gestión de clientes (Fase 7)
 
 **Objetivo:** tener la foto completa de cada cliente y no olvidar ningún cobro ni seguimiento.
@@ -71,4 +82,5 @@ El sistema ya es mobile-first, así que lo más rápido y barato es convertirlo 
 | 🟢 v0.3 | 25/09/2026 | Cuentas financieras, categorías, transferencias y cotización USD. |
 | 🟢 v0.4 | 25/09/2026 | Facturación recurrente y recordatorios de vencimiento por email. |
 | 🟢 v0.7 | 09/11/2026 | Proyectos, recordatorios internos y ficha del cliente. |
+| 🟡 v0.9 | 11/11/2026 | Día de pago, atrasos, cancelación, reparto entre socios y gastos fijos (en `develop`). |
 | ⚪ v0.8 | — | PWA y notificaciones push. |

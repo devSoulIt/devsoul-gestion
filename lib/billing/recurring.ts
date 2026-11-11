@@ -32,7 +32,6 @@ export async function generateRecurringInvoices(period: string = currentPeriod()
   });
 
   const result: RecurringResult = { period, created: [], skipped: 0 };
-  const dueDate = resolveDueDate(period);
 
   for (const contract of contracts) {
     if (contract.invoices.length > 0) {
@@ -46,7 +45,7 @@ export async function generateRecurringInvoices(period: string = currentPeriod()
           amount: contract.totalAmount,
           currency: contract.currency,
           period,
-          dueDate,
+          dueDate: resolveDueDate(period, contract.paymentDay ?? INVOICE_DUE_DAY),
           status: PaymentStatus.PENDING,
           recurringKey: `${contract.id}:${period}`,
         },
@@ -64,8 +63,8 @@ export async function generateRecurringInvoices(period: string = currentPeriod()
   return result;
 }
 
-function resolveDueDate(period: string) {
-  const scheduled = periodDueDate(period, INVOICE_DUE_DAY);
+function resolveDueDate(period: string, day: number) {
+  const scheduled = periodDueDate(period, day);
   const today = Date.parse(`${businessDateKey()}T00:00:00Z`);
   return scheduled.getTime() >= today
     ? scheduled

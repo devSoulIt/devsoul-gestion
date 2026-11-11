@@ -8,6 +8,7 @@ const SIGN: Record<TransactionType, 1 | -1> = {
   TRANSFER_IN: 1,
   EXPENSE: -1,
   TRANSFER_OUT: -1,
+  PARTNER_PAYOUT: -1,
 };
 
 export type AccountBalance = {
