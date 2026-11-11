@@ -90,6 +90,7 @@ export async function GET(req: NextRequest) {
             include: {
               client: { select: { id: true, companyName: true } },
               software: { select: { id: true, name: true } },
+              splitShares: { select: { userId: true, percent: true }, orderBy: { createdAt: "asc" } },
             },
           },
           reminders: {

@@ -5,11 +5,13 @@ import { Chip } from "@heroui/react/chip";
 import { Input } from "@heroui/react/input";
 import { Button } from "@heroui/react/button";
 import { Modal } from "@heroui/react";
-import { Bell, BellRing, CheckCircle, FileText, Plus, Repeat, Zap } from "lucide-react";
+import { Bell, BellRing, CalendarClock, CheckCircle, FileText, Plus, Repeat, XCircle, Zap } from "lucide-react";
 import { useJson } from "@/lib/hooks/use-json";
 import type { AccountsResponse } from "../finanzas/types";
 import { PayInvoiceModal, type PayableInvoice } from "./pay-invoice-modal";
 import { AutomationModal } from "./automation-modal";
+import { CancelInvoiceModal, type InvoiceSummary } from "./cancel-invoice-modal";
+import { DueDateModal } from "./due-date-modal";
 import { TaskModal } from "@/components/tasks/task-modal";
 import type { TaskDefaults } from "@/components/tasks/types";
 
@@ -17,7 +19,10 @@ type InvoiceRow = {
   id: string;
   amount: string;
   dueDate: string;
-  status: "PAID" | "PENDING";
+  status: "PAID" | "PENDING" | "CANCELLED";
+  delayDays: number | null;
+  cancelReason: string | null;
+  cancelledBy: { name: string } | null;
   currency: "ARS" | "USD";
   period: string;
   paymentDate: string | null;
@@ -26,8 +31,22 @@ type InvoiceRow = {
   contract: {
     client: { id: string; companyName: string };
     software: { id: string; name: string };
+    splitShares: { userId: string | null; percent: string }[];
   };
 };
+
+const STATUS_CHIP: Record<InvoiceRow["status"], { label: string; color: "success" | "warning" | "default" }> = {
+  PAID: { label: "Cobrada", color: "success" },
+  PENDING: { label: "Pendiente", color: "warning" },
+  CANCELLED: { label: "Cancelada", color: "default" },
+};
+
+function delayLabel(inv: InvoiceRow) {
+  const days = inv.delayDays ?? 0;
+  if (inv.status === "CANCELLED" || days <= 0) return null;
+  const unit = days === 1 ? "día" : "días";
+  return inv.status === "PAID" ? `Cobrada con ${days} ${unit} de atraso` : `${days} ${unit} de atraso`;
+}
 
 type ApiResponse = {
   data: InvoiceRow[];
@@ -65,11 +84,8 @@ function formatDate(iso: string) {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
+    timeZone: "UTC",
   });
-}
-
-function isOverdue(dueDate: string) {
-  return new Date(dueDate) < new Date();
 }
 
 function getLast12Months() {
@@ -99,6 +115,8 @@ export default function FacturacionPage() {
   const [periodFilter, setPeriodFilter] = useState("");
   const [paying, setPaying] = useState<PayableInvoice | null>(null);
   const [automationOpen, setAutomationOpen] = useState(false);
+  const [cancelling, setCancelling] = useState<InvoiceSummary | null>(null);
+  const [rescheduling, setRescheduling] = useState<InvoiceSummary | null>(null);
   const [more, setMore] = useState<{ key: string; page: number; rows: InvoiceRow[] }>({
     key: "",
     page: 1,
@@ -237,7 +255,9 @@ export default function FacturacionPage() {
           >
             <option value="" className="bg-black">Todos</option>
             <option value="PENDING" className="bg-black">Pendientes</option>
+            <option value="OVERDUE" className="bg-black">Con atraso</option>
             <option value="PAID" className="bg-black">Cobradas</option>
+            <option value="CANCELLED" className="bg-black">Canceladas</option>
           </select>
         </div>
         <div className="flex-1 min-w-[180px]">
@@ -283,11 +303,20 @@ export default function FacturacionPage() {
 
           <div className="space-y-2">
             {invoices.map((inv) => {
-              const overdue = inv.status === "PENDING" && isOverdue(inv.dueDate);
+              const overdue = inv.status === "PENDING" && (inv.delayDays ?? 0) > 0;
+              const delay = delayLabel(inv);
+              const summary: InvoiceSummary = {
+                id: inv.id,
+                amount: inv.amount,
+                currency: inv.currency,
+                period: inv.period,
+                clientName: inv.contract.client.companyName,
+                dueDate: inv.dueDate,
+              };
               return (
                 <div
                   key={inv.id}
-                  className="glass rounded-xl px-4 py-3 grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-2 md:gap-4 items-center"
+                  className={`glass rounded-xl px-4 py-3 grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-2 md:gap-4 items-center ${inv.status === "CANCELLED" ? "opacity-60" : ""}`}
                 >
                   {/* Cliente / Software */}
                   <div className="min-w-0">
@@ -320,21 +349,23 @@ export default function FacturacionPage() {
                   </p>
 
                   {/* Vencimiento */}
-                  <p className={`text-xs md:text-sm ${overdue ? "text-red-400" : "text-white/50"}`}>
-                    {formatDate(inv.dueDate)}
-                    {overdue && (
-                      <span className="ml-1 text-red-400/70 text-xs">· Vencida</span>
+                  <div className="text-xs md:text-sm">
+                    <p className={overdue ? "text-red-400" : "text-white/50"}>{formatDate(inv.dueDate)}</p>
+                    {delay && (
+                      <p className={`text-xs ${inv.status === "PAID" ? "text-amber-300/80" : "text-red-400/80"}`}>{delay}</p>
                     )}
-                  </p>
+                    {inv.status === "CANCELLED" && inv.cancelReason && (
+                      <p className="text-xs text-white/40 line-clamp-2" title={inv.cancelReason}>
+                        Motivo: {inv.cancelReason}
+                        {inv.cancelledBy ? ` · ${inv.cancelledBy.name}` : ""}
+                      </p>
+                    )}
+                  </div>
 
                   {/* Estado */}
                   <div>
-                    <Chip
-                      color={inv.status === "PAID" ? "success" : "warning"}
-                      size="sm"
-                      variant="soft"
-                    >
-                      {inv.status === "PAID" ? "Cobrada" : "Pendiente"}
+                    <Chip color={STATUS_CHIP[inv.status].color} size="sm" variant="soft">
+                      {STATUS_CHIP[inv.status].label}
                     </Chip>
                   </div>
 
@@ -358,13 +389,31 @@ export default function FacturacionPage() {
                     )}
                     {inv.status === "PENDING" && (
                       <button
+                        onClick={() => setRescheduling(summary)}
+                        title="Cambiar fecha de pago"
+                        className="text-white/40 hover:text-white transition-colors"
+                      >
+                        <CalendarClock size={17} />
+                      </button>
+                    )}
+                    {inv.status === "PENDING" && (
+                      <button
+                        onClick={() => setCancelling(summary)}
+                        title="Cancelar factura"
+                        className="text-white/40 hover:text-red-400 transition-colors"
+                      >
+                        <XCircle size={17} />
+                      </button>
+                    )}
+                    {inv.status === "PENDING" && (
+                      <button
                         onClick={() =>
                           setPaying({
-                            id: inv.id,
-                            amount: inv.amount,
-                            currency: inv.currency,
-                            period: inv.period,
-                            clientName: inv.contract.client.companyName,
+                            ...summary,
+                            contractShares: inv.contract.splitShares.map((s) => ({
+                              userId: s.userId,
+                              percent: Number(s.percent),
+                            })),
                           })
                         }
                         title="Registrar cobro"
@@ -517,6 +566,9 @@ export default function FacturacionPage() {
         defaults={collectionTask ?? undefined}
         onSaved={() => setCollectionTask(null)}
       />
+
+      <CancelInvoiceModal invoice={cancelling} onClose={() => setCancelling(null)} onDone={invoicesQ.reload} />
+      <DueDateModal invoice={rescheduling} onClose={() => setRescheduling(null)} onDone={invoicesQ.reload} />
 
       <PayInvoiceModal
         invoice={paying}

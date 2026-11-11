@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { AccountsSection } from "./accounts-section";
 import { CategoriesSection } from "./categories-section";
 import { RatesSection } from "./rates-section";
+import { SplitSection } from "./split-section";
 
 export default function FinanzasConfigPage() {
   return (
@@ -19,6 +20,7 @@ export default function FinanzasConfigPage() {
         <h1 className="text-xl font-bold text-white">Configuración financiera</h1>
       </div>
       <AccountsSection />
+      <SplitSection />
       <RatesSection />
       <CategoriesSection />
     </div>

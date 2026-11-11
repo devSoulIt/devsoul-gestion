@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { openai } from "@ai-sdk/openai";
 import { streamText, type CoreMessage } from "ai";
-import { PaymentStatus, ProjectStatus, TaskStatus, TransactionType } from "@prisma/client";
+import { OccurrenceStatus, PaymentStatus, PayoutStatus, ProjectStatus, TaskStatus, TransactionType } from "@prisma/client";
+import { delayDays } from "@/lib/billing/delay";
 import { prisma } from "@/lib/prisma";
 import { getAccountBalances } from "@/lib/finance/balances";
 import { invoiceAmountArs } from "@/lib/finance/invoices";
@@ -90,6 +91,51 @@ export async function POST(req: NextRequest) {
       ? top3.map(([name, total], i) => `  ${i + 1}. ${name}: ${fmt(total)}`).join("\n")
       : "  (Sin datos)";
 
+    const [lateInvoices, partnerDebt, fixedExpenses, pendingExpenses] = await Promise.all([
+      prisma.invoice.findMany({
+        where: { status: PaymentStatus.PENDING, dueDate: { lt: today } },
+        select: {
+          amount: true,
+          currency: true,
+          status: true,
+          dueDate: true,
+          period: true,
+          contract: { select: { client: { select: { companyName: true } } } },
+        },
+        orderBy: { dueDate: "asc" },
+        take: 10,
+      }),
+      prisma.payout.groupBy({
+        by: ["userId"],
+        where: { status: PayoutStatus.PENDING, userId: { not: null } },
+        _sum: { amountArs: true },
+      }),
+      prisma.recurringExpense.findMany({
+        where: { active: true },
+        select: { name: true, amount: true, currency: true, frequency: true },
+      }),
+      prisma.expenseOccurrence.count({ where: { status: OccurrenceStatus.PENDING } }),
+    ]);
+    const partnerNames = new Map(
+      (await prisma.user.findMany({ select: { id: true, name: true } })).map((u) => [u.id, u.name])
+    );
+    const lateLines = lateInvoices.length
+      ? lateInvoices
+          .map(
+            (i) =>
+              `  - ${i.contract.client.companyName} (${i.period}): ${Number(i.amount).toLocaleString("es-AR")} ${i.currency}, ${delayDays(i)} días de atraso`
+          )
+          .join("\n")
+      : "  (Ninguna)";
+    const debtLines = partnerDebt.length
+      ? partnerDebt.map((d) => `  - ${partnerNames.get(d.userId ?? "") ?? "Socio"}: ${fmt(Number(d._sum.amountArs ?? 0))}`).join("\n")
+      : "  (Nada pendiente)";
+    const fixedLines = fixedExpenses.length
+      ? fixedExpenses
+          .map((e) => `  - ${e.name}: ${Number(e.amount).toLocaleString("es-AR")} ${e.currency} ${e.frequency === "YEARLY" ? "por año" : "por mes"}`)
+          .join("\n")
+      : "  (Sin gastos fijos cargados)";
+
     const taskLines = overdueTasks.length
       ? overdueTasks
           .map((t) => `  - ${TASK_TYPE_LABELS[t.type]}: ${t.title}${t.client ? ` (${t.client.companyName})` : ""}, vencido el ${t.dueAt.toISOString().slice(0, 10)}`)
@@ -119,6 +165,12 @@ ${accountLines}
 - Facturas pendientes de cobro: ${fmt(pending)} (${pendingN} facturas)
 - Top 3 softwares por facturación histórica:
 ${topLines}
+- Facturas con atraso hoy (${lateInvoices.length}${lateInvoices.length === 10 ? "+" : ""}):
+${lateLines}
+- Pendiente de pagar a cada socio (su parte de los cobros):
+${debtLines}
+- Gastos fijos recurrentes (${pendingExpenses} pendientes de confirmar):
+${fixedLines}
 
 Contexto operativo:
 - Recordatorios internos vencidos (${overdueTasks.length}${overdueTasks.length === 10 ? "+" : ""}):

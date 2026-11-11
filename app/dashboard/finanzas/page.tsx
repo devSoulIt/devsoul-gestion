@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { FinanceTabs } from "@/components/finance/finance-tabs";
 import { Button } from "@heroui/react/button";
 import {
   ArrowLeftRight,
@@ -100,6 +101,7 @@ export default function FinanzasPage() {
 
   return (
     <div className="space-y-4">
+      <FinanceTabs />
       <div className="glass rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h1 className="text-xl font-bold text-white">Finanzas</h1>
         <div className="flex gap-2 flex-wrap">
