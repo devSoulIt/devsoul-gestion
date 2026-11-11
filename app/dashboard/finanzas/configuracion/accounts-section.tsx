@@ -21,6 +21,7 @@ type Form = {
   openingBalance: string;
   openingDate: string;
   active: boolean;
+  earnsYield: boolean;
 };
 
 const EMPTY: Form = {
@@ -30,6 +31,7 @@ const EMPTY: Form = {
   openingBalance: "0",
   openingDate: todayKey(),
   active: true,
+  earnsYield: false,
 };
 
 export function AccountsSection() {
@@ -53,6 +55,7 @@ export function AccountsSection() {
             openingBalance: String(account.openingBalance),
             openingDate: account.openingDate.slice(0, 10),
             active: account.active,
+            earnsYield: account.earnsYield,
           }
         : { ...EMPTY, openingDate: todayKey() }
     );
@@ -103,6 +106,7 @@ export function AccountsSection() {
               <p className="text-xs text-white/40">
                 {PROVIDER_LABELS[a.provider]} · {a.currency} · Inicial {formatAmount(a.openingBalance, a.currency)} al{" "}
                 {formatDate(a.openingDate)}
+                {a.earnsYield ? " · Remunerada" : ""}
               </p>
             </div>
             <div className="flex items-center gap-3 flex-shrink-0">
@@ -169,6 +173,15 @@ export function AccountsSection() {
             <input type="date" value={form.openingDate} onChange={(e) => set("openingDate", e.target.value)} className={inputClass} />
           </Field>
         </div>
+        <label className="flex items-center gap-2 text-sm text-white/70">
+          <input
+            type="checkbox"
+            checked={form.earnsYield}
+            onChange={(e) => set("earnsYield", e.target.checked)}
+            className="accent-[#bdf61d]"
+          />
+          Cuenta remunerada (rinde todos los días)
+        </label>
         {editing && (
           <label className="flex items-center gap-2 text-sm text-white/70">
             <input type="checkbox" checked={form.active} onChange={(e) => set("active", e.target.checked)} className="accent-[#bdf61d]" />

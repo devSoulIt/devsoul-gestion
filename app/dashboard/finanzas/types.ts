@@ -1,6 +1,13 @@
 import type { CurrencyCode } from "@/lib/format";
 
-export type TxType = "INCOME" | "EXPENSE" | "TRANSFER_IN" | "TRANSFER_OUT" | "PARTNER_PAYOUT";
+export type TxType =
+  | "INCOME"
+  | "EXPENSE"
+  | "TRANSFER_IN"
+  | "TRANSFER_OUT"
+  | "PARTNER_PAYOUT"
+  | "ADJUSTMENT_IN"
+  | "ADJUSTMENT_OUT";
 export type TxSource =
   | "MANUAL"
   | "INVOICE"
@@ -8,7 +15,9 @@ export type TxSource =
   | "UALA_IMPORT"
   | "UALA_WEBHOOK"
   | "PAYOUT"
-  | "RECURRING_EXPENSE";
+  | "RECURRING_EXPENSE"
+  | "ADJUSTMENT"
+  | "YIELD";
 export type Provider = "UALA" | "BANK" | "CASH" | "OTHER";
 
 export type Account = {
@@ -19,6 +28,9 @@ export type Account = {
   active: boolean;
   openingBalance: number;
   openingDate: string;
+  earnsYield: boolean;
+  reconciledAt: string | null;
+  reconciledBalance: number | null;
   balance: number;
   balanceArs: number | null;
 };
@@ -76,6 +88,24 @@ export const SOURCE_LABELS: Record<TxSource, string> = {
   UALA_WEBHOOK: "Ualá Bis",
   PAYOUT: "Pago a socio",
   RECURRING_EXPENSE: "Gasto fijo",
+  ADJUSTMENT: "Ajuste de saldo",
+  YIELD: "Rendimiento",
+};
+
+export type YieldResponse = {
+  month: string;
+  today: string;
+  totalArs: number;
+  days: {
+    id: string;
+    accountId: string;
+    date: string;
+    amount: number;
+    amountArs: number;
+    currency: CurrencyCode;
+    daily: boolean;
+  }[];
+  accounts: { id: string; name: string; currency: CurrencyCode; todayAmount: number | null }[];
 };
 
 export const selectClass =
