@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { openai } from "@ai-sdk/openai";
-import { streamText, type CoreMessage } from "ai";
+import Anthropic from "@anthropic-ai/sdk";
 import { OccurrenceStatus, PaymentStatus, PayoutStatus, ProjectStatus, TaskStatus, TransactionSource, TransactionType } from "@prisma/client";
 import { delayDays } from "@/lib/billing/delay";
 import { prisma } from "@/lib/prisma";
@@ -9,11 +8,36 @@ import { invoiceAmountArs } from "@/lib/finance/invoices";
 import { businessDateKey } from "@/lib/dates";
 import { TASK_TYPE_LABELS } from "@/lib/tasks/labels";
 
-export const maxDuration = 30;
+export const maxDuration = 120;
+
+const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-5-5";
+const MAX_HISTORY = 40;
+
+type ChatInput = { role?: unknown; content?: unknown };
+
+function toClaudeMessages(input: unknown): Anthropic.Beta.BetaMessageParam[] {
+  const list = Array.isArray(input) ? (input as ChatInput[]) : [];
+  const messages = list
+    .filter(
+      (m): m is { role: "user" | "assistant"; content: string } =>
+        (m.role === "user" || m.role === "assistant") && typeof m.content === "string" && m.content.trim() !== ""
+    )
+    .slice(-MAX_HISTORY)
+    .map((m) => ({ role: m.role, content: m.content }));
+  while (messages.length && messages[0].role !== "user") messages.shift();
+  return messages;
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages }: { messages: CoreMessage[] } = await req.json();
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return NextResponse.json({ error: "Falta configurar ANTHROPIC_API_KEY" }, { status: 503 });
+    }
+    const body = await req.json().catch(() => ({}));
+    const messages = toClaudeMessages(body.messages);
+    if (messages.length === 0 || messages[messages.length - 1].role !== "user") {
+      return NextResponse.json({ error: "Falta la pregunta" }, { status: 400 });
+    }
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -192,13 +216,47 @@ ${projectLines}
 
 Respondé siempre en español rioplatense. Sé conciso, directo y orientado a la toma de decisiones.`;
 
-    const result = streamText({
-      model: openai("gpt-4o"),
+    const client = new Anthropic();
+    const stream = client.beta.messages.stream({
+      model: MODEL,
+      max_tokens: 16000,
+      betas: ["server-side-fallback-2026-07-01"],
+      fallbacks: "default",
+      output_config: { effort: "medium" },
       system: systemPrompt,
       messages,
     });
 
-    return result.toDataStreamResponse();
+    const encoder = new TextEncoder();
+    const body2 = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        try {
+          for await (const event of stream) {
+            if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
+              controller.enqueue(encoder.encode(event.delta.text));
+            }
+          }
+          const final = await stream.finalMessage();
+          if (final.stop_reason === "refusal") {
+            controller.enqueue(encoder.encode("\n\nNo puedo responder esa consulta."));
+          } else if (final.stop_reason === "max_tokens") {
+            controller.enqueue(encoder.encode("\n\n(Respuesta cortada por largo.)"));
+          }
+        } catch (error) {
+          console.error("[POST /api/ia/chat] stream", error);
+          controller.enqueue(encoder.encode("\n\nHubo un error al consultar a Claude. Probá de nuevo."));
+        } finally {
+          controller.close();
+        }
+      },
+      cancel() {
+        stream.abort();
+      },
+    });
+
+    return new Response(body2, {
+      headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" },
+    });
   } catch (error) {
     console.error("[POST /api/ia/chat]", error);
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 });

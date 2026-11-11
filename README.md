@@ -19,7 +19,7 @@ Sistema de gestión interna de Devsoul: clientes, softwares, contratos, facturac
    - `RESEND_API_KEY`, `EMAIL_FROM` y `EMAIL_REPLY_TO` (opcional): para los recordatorios por email.
    - `INVOICE_DUE_DAY`, `REMINDER_DAYS_BEFORE` y `REMINDER_DAYS_AFTER` (opcionales): por defecto 10, 3 y 7.
    - `APP_URL` (opcional): la URL pública de la app. Se usa en el link del resumen diario de recordatorios.
-   - `OPENAI_API_KEY`: para el chat de IA.
+   - `ANTHROPIC_API_KEY`: para el chat de IA, que usa Claude (Anthropic). `ANTHROPIC_MODEL` es opcional y por defecto vale `claude-opus-5-5`.
 
 3. Aplicar las migraciones y cargar los datos iniciales:
 
