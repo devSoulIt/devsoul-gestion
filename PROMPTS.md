@@ -572,6 +572,7 @@ Llevá los cobros flexibles a Facturación, Contratos y la ficha del cliente.
 - **Depende de:** P9.2
 - **Fecha:** 13/11/2026 · **Commit:** `557bc10` · **Notas:**
   - Finanzas → Socios: botón "Registrar pago" (socio, cuenta, fecha, monto libre y concepto), tarjetas con acumulado, pagado y saldo o adelanto, historial con reversión y detalle de lo acumulado por cobro. Se eliminó `POST /api/payouts/[id]/pay`.
+  - Opción "Descontar de una cuenta de la empresa": si se destilda, el pago no crea movimiento ni toca el saldo (migración `20261113160000_partner_payment_optional_account`, `PartnerPayment.accountId` opcional).
   - Finanzas → Movimientos: título y link al origen (cliente o socio), usuario que lo cargó y saldo después de cada movimiento al filtrar por cuenta.
   - Finanzas → Auditoría (`/api/audit`, solo OWNER).
 

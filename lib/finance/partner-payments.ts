@@ -1,10 +1,11 @@
 import "server-only";
-import { Prisma, TransactionSource, TransactionType } from "@prisma/client";
+import { Currency, Prisma, TransactionSource, TransactionType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { audit } from "@/lib/audit";
 import { formatAmount } from "@/lib/format";
 import { buildLedgerEntry, parseAmount } from "./ledger";
 import { checkPaymentDate } from "./payment-date";
+import { getRateToArs, toArs } from "./rates";
 import { PaymentError } from "@/lib/billing/payments";
 
 type Db = Prisma.TransactionClient;
@@ -18,52 +19,61 @@ export type PartnerPaymentRequest = {
   date?: unknown;
   confirmDate?: unknown;
   concept?: unknown;
+  deductFromAccount?: unknown;
+  currency?: unknown;
 };
 
 export async function preparePartnerPayment(body: PartnerPaymentRequest, createdById: string) {
   const user = await prisma.user.findUnique({ where: { id: String(body.userId ?? "") }, select: { id: true, name: true } });
   if (!user) throw new PaymentError("Elegí el socio");
 
-  const account = await prisma.financialAccount.findFirst({ where: { id: String(body.accountId ?? ""), active: true } });
-  if (!account) throw new PaymentError("Elegí la cuenta desde la que pagaste");
+  const deduct = body.deductFromAccount !== false;
+  const account = deduct
+    ? await prisma.financialAccount.findFirst({ where: { id: String(body.accountId ?? ""), active: true } })
+    : null;
+  if (deduct && !account) throw new PaymentError("Elegí la cuenta desde la que pagaste");
 
+  const currency = account?.currency ?? (body.currency === Currency.USD ? Currency.USD : Currency.ARS);
   const amount = parseAmount(body.amount);
   if (!amount) throw new PaymentError("Indicá el monto pagado");
 
-  const dateCheck = checkPaymentDate({ value: body.date, confirmed: body.confirmDate, reconciledAt: account.reconciledAt });
+  const dateCheck = checkPaymentDate({ value: body.date, confirmed: body.confirmDate, reconciledAt: account?.reconciledAt });
   if (!dateCheck.ok) {
     throw new PaymentError(dateCheck.error, dateCheck.status, "warnings" in dateCheck ? dateCheck.warnings : undefined);
   }
 
   const concept = typeof body.concept === "string" && body.concept.trim() ? body.concept.trim().slice(0, 200) : null;
-  const entry = await buildLedgerEntry({
-    account,
-    type: TransactionType.PARTNER_PAYOUT,
-    amount,
-    date: dateCheck.date,
-    description: `Pago a ${user.name}${concept ? ` — ${concept}` : ""}`,
-    source: TransactionSource.PAYOUT,
-    createdById,
-  });
+  const entry = account
+    ? await buildLedgerEntry({
+        account,
+        type: TransactionType.PARTNER_PAYOUT,
+        amount,
+        date: dateCheck.date,
+        description: `Pago a ${user.name}${concept ? ` — ${concept}` : ""}`,
+        source: TransactionSource.PAYOUT,
+        createdById,
+      })
+    : null;
+  const rate = entry ? Number(entry.rateToArs) : (await getRateToArs(currency, dateCheck.date)).rate;
 
-  return { user, account, amount, date: dateCheck.date, concept, entry, createdById };
+  return { user, account, currency, rate, amount, date: dateCheck.date, concept, entry, createdById };
 }
 
 export type PreparedPartnerPayment = Awaited<ReturnType<typeof preparePartnerPayment>>;
 
 export async function registerPartnerPayment(tx: Db, input: PreparedPartnerPayment) {
-  const transaction = await tx.transaction.create({ data: input.entry });
+  const transaction = input.entry ? await tx.transaction.create({ data: input.entry }) : null;
   const payment = await tx.partnerPayment.create({
     data: {
       userId: input.user.id,
-      accountId: input.account.id,
+      accountId: input.account?.id ?? null,
       amount: input.amount,
-      currency: input.account.currency,
-      rateToArs: transaction.rateToArs,
-      amountArs: transaction.amountArs,
+      currency: input.currency,
+      rateToArs: input.rate,
+      amountArs: toArs(input.amount, input.rate),
       date: input.date,
       concept: input.concept,
-      transactionId: transaction.id,
+      transactionId: transaction?.id ?? null,
       createdById: input.createdById,
     },
   });
@@ -72,8 +82,10 @@ export async function registerPartnerPayment(tx: Db, input: PreparedPartnerPayme
     action: "partnerPayment.create",
     entity: "PartnerPayment",
     entityId: payment.id,
-    summary: `Pago a ${input.user.name} de ${formatAmount(input.amount, input.account.currency)} desde ${input.account.name}`,
-    diff: { amount: input.amount, date: input.date.toISOString(), concept: input.concept },
+    summary: `Pago a ${input.user.name} de ${formatAmount(input.amount, input.currency)} ${
+      input.account ? `desde ${input.account.name}` : "fuera de las cuentas de la empresa"
+    }`,
+    diff: { amount: input.amount, date: input.date.toISOString(), concept: input.concept, accountId: input.account?.id ?? null },
   });
   return payment;
 }

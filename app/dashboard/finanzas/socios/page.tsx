@@ -22,7 +22,7 @@ type PartnerPaymentRow = {
   reversedAt: string | null;
   reverseReason: string | null;
   user: { id: string; name: string };
-  account: { id: string; name: string; currency: CurrencyCode };
+  account: { id: string; name: string; currency: CurrencyCode } | null;
   createdBy: { name: string } | null;
 };
 
@@ -127,7 +127,7 @@ export default function SociosPage() {
                     {p.concept && <span className="text-white/50"> · {p.concept}</span>}
                   </p>
                   <p className="text-xs text-white/40 truncate">
-                    {formatDate(p.date)} · {p.account.name}
+                    {formatDate(p.date)} · {p.account ? p.account.name : "Fuera de las cuentas de la empresa"}
                     {p.createdBy && ` · cargó ${p.createdBy.name}`}
                   </p>
                   {p.reversedAt && <p className="text-xs text-red-400/80">Revertido: {p.reverseReason}</p>}
@@ -204,6 +204,8 @@ type ModalProps = {
 function PartnerPaymentModal({ userId, balances, accounts, onClose, onSaved }: ModalProps) {
   const [partner, setPartner] = useState("");
   const [accountId, setAccountId] = useState("");
+  const [deduct, setDeduct] = useState(true);
+  const [currency, setCurrency] = useState<CurrencyCode>("ARS");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(todayKey());
   const [concept, setConcept] = useState("");
@@ -218,6 +220,8 @@ function PartnerPaymentModal({ userId, balances, accounts, onClose, onSaved }: M
     if (userId !== null) {
       setPartner(userId || balances[0]?.userId || "");
       setAccountId((accounts.find((a) => a.currency === "ARS") ?? accounts[0])?.id ?? "");
+      setDeduct(true);
+      setCurrency("ARS");
       setAmount("");
       setDate(todayKey());
       setConcept("");
@@ -228,20 +232,23 @@ function PartnerPaymentModal({ userId, balances, accounts, onClose, onSaved }: M
   }
 
   const balance = balances.find((b) => b.userId === partner);
-  const account = accounts.find((a) => a.id === accountId);
+  const account = deduct ? accounts.find((a) => a.id === accountId) : undefined;
+  const payCurrency = account?.currency ?? currency;
   const value = Number(amount) || 0;
-  const valueArs = account?.currency === "ARS" ? value : null;
+  const valueArs = payCurrency === "ARS" ? value : null;
 
   const submit = async () => {
     if (!partner) return setError("Elegí el socio.");
-    if (!account) return setError("Elegí la cuenta desde la que pagaste.");
+    if (deduct && !account) return setError("Elegí la cuenta desde la que pagaste.");
     if (!(value > 0)) return setError("Indicá el monto pagado.");
     if (warnings.length && !confirmDate) return setError("Confirmá la fecha para guardar.");
     setSaving(true);
     setError(null);
     const result = await submitJson("/api/partner-payments", {
       userId: partner,
-      accountId,
+      deductFromAccount: deduct,
+      accountId: deduct ? accountId : undefined,
+      currency: deduct ? undefined : currency,
       amount: value,
       date,
       confirmDate,
@@ -293,16 +300,43 @@ function PartnerPaymentModal({ userId, balances, accounts, onClose, onSaved }: M
           )}
         </p>
       )}
+      <label className="flex items-start gap-2 text-sm text-white cursor-pointer">
+        <input
+          type="checkbox"
+          checked={deduct}
+          onChange={(e) => {
+            setDeduct(e.target.checked);
+            setWarnings([]);
+            setConfirmDate(false);
+          }}
+          className="accent-[#bdf61d] mt-1"
+        />
+        <span>
+          Descontar de una cuenta de la empresa
+          <span className="block text-xs text-white/40">
+            Destildalo si la plata no salió de Ualá u otra cuenta, por ejemplo si el cliente le pagó directo al socio.
+          </span>
+        </span>
+      </label>
       <div className="flex gap-3">
-        <Field label="Cuenta *">
-          <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={selectClass}>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id} className="bg-black">
-                {a.name} ({a.currency})
-              </option>
-            ))}
-          </select>
-        </Field>
+        {deduct ? (
+          <Field label="Cuenta *">
+            <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={selectClass}>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id} className="bg-black">
+                  {a.name} ({a.currency})
+                </option>
+              ))}
+            </select>
+          </Field>
+        ) : (
+          <Field label="Moneda *">
+            <select value={currency} onChange={(e) => setCurrency(e.target.value as CurrencyCode)} className={selectClass}>
+              <option value="ARS" className="bg-black">ARS</option>
+              <option value="USD" className="bg-black">USD</option>
+            </select>
+          </Field>
+        )}
         <Field label="Fecha *">
           <input
             type="date"
@@ -317,7 +351,7 @@ function PartnerPaymentModal({ userId, balances, accounts, onClose, onSaved }: M
           />
         </Field>
       </div>
-      <Field label={`Monto * (${account?.currency ?? "ARS"})`}>
+      <Field label={`Monto * (${payCurrency})`}>
         <input
           type="number"
           inputMode="decimal"
@@ -337,7 +371,11 @@ function PartnerPaymentModal({ userId, balances, accounts, onClose, onSaved }: M
         />
       </Field>
       <DateWarnings warnings={warnings} confirmed={confirmDate} onConfirm={setConfirmDate} />
-      <p className="text-xs text-white/40">Baja el saldo de la cuenta, pero no cuenta como gasto de la empresa.</p>
+      <p className="text-xs text-white/40">
+        {deduct
+          ? "Baja el saldo de la cuenta, pero no cuenta como gasto de la empresa."
+          : "No mueve ninguna cuenta: solo descuenta lo que se le debe al socio."}
+      </p>
     </FormModal>
   );
 }
