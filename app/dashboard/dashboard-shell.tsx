@@ -40,7 +40,7 @@ const navItems = [
   { href: "/dashboard/facturacion", label: "Facturación", icon: FileText },
   { href: "/dashboard/finanzas", label: "Finanzas", icon: Wallet },
   { href: "/dashboard/tickets", label: "Tickets", icon: Ticket },
-  { href: "/dashboard/ia", label: "Chat IA", icon: Bot },
+  { href: "/dashboard/ia", label: "Chat IA", icon: Bot, badge: "Pronto" },
 ];
 
 const sectionLabels: Record<string, string> = {
@@ -109,7 +109,7 @@ export function DashboardShell({
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-          {navItems.map(({ href, label, icon: Icon }) => {
+          {navItems.map(({ href, label, icon: Icon, badge }) => {
             const active =
               href === "/dashboard"
                 ? pathname === "/dashboard"
@@ -131,6 +131,11 @@ export function DashboardShell({
               >
                 <Icon size={18} />
                 {label}
+                {badge && (
+                  <span className="ml-auto text-[10px] text-white/40 border border-white/10 rounded-full px-1.5 py-0.5">
+                    {badge}
+                  </span>
+                )}
               </Link>
             );
           })}
