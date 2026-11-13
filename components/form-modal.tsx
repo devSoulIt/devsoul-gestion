@@ -90,3 +90,19 @@ export async function postJson(url: string, body: unknown, method = "POST") {
   const data = await res.json().catch(() => null);
   return (data?.error as string | undefined) ?? "Error al guardar.";
 }
+
+export type SubmitResult = { error: string | null; warnings: string[] };
+
+export async function submitJson(url: string, body: unknown, method = "POST"): Promise<SubmitResult> {
+  const res = await fetch(url, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (res.ok) return { error: null, warnings: [] };
+  const data = await res.json().catch(() => null);
+  return {
+    error: (data?.error as string | undefined) ?? "Error al guardar.",
+    warnings: Array.isArray(data?.warnings) ? (data.warnings as string[]) : [],
+  };
+}

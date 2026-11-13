@@ -5,6 +5,7 @@ import { findClientProject } from "@/lib/projects";
 import { requireRole } from "@/lib/auth/session";
 import { parseShares, replaceSplit, type ShareInput } from "@/lib/finance/splits";
 import { parsePaymentDay } from "@/lib/billing/payment-day";
+import { audit } from "@/lib/audit";
 
 type UpdateContractBody = {
   active?: boolean;
@@ -56,6 +57,14 @@ export async function PATCH(
 
     const updated = await prisma.$transaction(async (tx) => {
       if (shares !== undefined) await replaceSplit(tx, id, shares);
+      await audit(tx, {
+        userId: auth.session.userId,
+        action: "contract.update",
+        entity: "Contract",
+        entityId: id,
+        summary: "Contrato editado",
+        diff: JSON.parse(JSON.stringify({ ...body, paymentDay })),
+      });
       return tx.contract.update({
         where: { id },
         data: {

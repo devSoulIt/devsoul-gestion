@@ -3,7 +3,8 @@ import { ClientStage, PaymentStatus, Prisma, TaskStatus, TicketStatus } from "@p
 import { prisma } from "@/lib/prisma";
 import { parseClient, type ClientBody } from "@/lib/clients";
 import { businessDateKey } from "@/lib/dates";
-import { invoiceAmountArs } from "@/lib/finance/invoices";
+import { invoiceAmountArs, invoiceOutstandingArs } from "@/lib/finance/invoices";
+import { getContractAccounts } from "@/lib/billing/payments";
 import { getCurrentRates } from "@/lib/finance/rates";
 import { projectInclude } from "@/lib/projects";
 import { taskInclude } from "@/lib/tasks/service";
@@ -11,6 +12,7 @@ import { taskInclude } from "@/lib/tasks/service";
 const invoiceSelect = {
   id: true,
   amount: true,
+  paidAmount: true,
   currency: true,
   rateToArs: true,
   dueDate: true,
@@ -43,6 +45,7 @@ export async function GET(
           include: {
             software: { select: { id: true, name: true } },
             project: { select: { id: true, name: true } },
+            splitShares: { select: { userId: true, percent: true }, orderBy: { createdAt: "asc" } },
           },
           orderBy: [{ active: "desc" }, { startDate: "desc" }],
         }),
@@ -83,15 +86,18 @@ export async function GET(
     const withArs = <T extends (typeof pendingInvoices)[number]>(invoice: T) => ({
       ...invoice,
       amountArs: invoiceAmountArs(invoice, rates.USD),
+      outstandingArs: invoiceOutstandingArs(invoice, rates.USD),
       overdue: invoice.status === PaymentStatus.PENDING && invoice.dueDate < today,
     });
     const pending = pendingInvoices.map(withArs);
-    const sum = (list: { amountArs: number }[]) => Math.round(list.reduce((acc, i) => acc + i.amountArs, 0) * 100) / 100;
+    const sum = (list: { outstandingArs: number }[]) =>
+      Math.round(list.reduce((acc, i) => acc + i.outstandingArs, 0) * 100) / 100;
+    const accounts = await getContractAccounts(contracts.map((c) => c.id));
 
     return NextResponse.json({
       client,
       projects,
-      contracts,
+      contracts: contracts.map((c) => ({ ...c, account: accounts.get(c.id) ?? null })),
       invoices: { pending, paid: paidInvoices.map(withArs) },
       tickets,
       tasks,

@@ -7,6 +7,7 @@ const TABS = [
   { href: "/dashboard/finanzas", label: "Movimientos" },
   { href: "/dashboard/finanzas/socios", label: "Socios" },
   { href: "/dashboard/finanzas/gastos-fijos", label: "Gastos fijos" },
+  { href: "/dashboard/finanzas/auditoria", label: "Auditoría" },
 ];
 
 export function FinanceTabs() {

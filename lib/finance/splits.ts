@@ -71,7 +71,7 @@ export async function replaceSplit(db: Db, contractId: string | null, shares: Sh
 }
 
 export function buildPayouts(
-  invoiceId: string,
+  paymentId: string,
   received: { amount: number; currency: Currency; rateToArs: number },
   shares: ShareInput[]
 ): Prisma.PayoutCreateManyInput[] {
@@ -79,7 +79,7 @@ export function buildPayouts(
   const rows: Prisma.PayoutCreateManyInput[] = partners.map((s) => {
     const amount = round2((received.amount * s.percent) / 100);
     return {
-      invoiceId,
+      paymentId,
       userId: s.userId,
       percent: s.percent,
       amount,
@@ -92,7 +92,7 @@ export function buildPayouts(
   const companyPercent = shares.find((s) => !s.userId)?.percent ?? 0;
   const companyAmount = round2(received.amount - rows.reduce((acc, r) => acc + Number(r.amount), 0));
   rows.push({
-    invoiceId,
+    paymentId,
     userId: null,
     percent: companyPercent,
     amount: companyAmount,

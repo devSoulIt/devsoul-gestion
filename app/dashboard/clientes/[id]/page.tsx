@@ -268,7 +268,7 @@ export default function ClientDetailPage() {
         </div>
       )}
 
-      {tab === "billing" && <BillingSection detail={detail.data} onNewTask={openTask} />}
+      {tab === "billing" && <BillingSection detail={detail.data} onNewTask={openTask} onChanged={detail.reload} />}
 
       {tab === "tickets" && <TicketsSection tickets={detail.data.tickets} />}
 

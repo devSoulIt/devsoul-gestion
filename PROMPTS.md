@@ -522,6 +522,80 @@ Implementá Web Push con la librería web-push y claves VAPID (VAPID_PUBLIC_KEY,
 
 ---
 
+## Fase 9: Cobros flexibles y cuenta corriente
+
+> Detalle en `ACTUALIZACIONES.md` (v0.11). Surgió del caso Popeye (10/11/2026): un contrato de $1.100.000 en 3 cuotas de $366.666,67, un pago real de $400.000 cargado como factura extra y fechas de cobro equivocadas (02/2026 y 09/2026).
+
+### P9.1: Modelo de cobros, pagos a socios y auditoría
+- **Estado:** [x]
+- **Depende de:** nada
+- **Fecha:** 13/11/2026 · **Commit:** · **Notas:**
+  - Migración `20261113120000_payments_ledger_audit`: `Payment`, `PaymentAllocation`, `PartnerPayment`, `AuditLog`, `Invoice.paidAmount`, `Contract.billingMode` y `Payout.paymentId`.
+  - `Transaction.invoiceId` y `Payout.transactionId` se reemplazan por `Payment.transactionId` y `PartnerPayment.transactionId`. El backfill convierte cada factura cobrada en un `Payment` con su asignación y cada payout pagado en un `PartnerPayment`.
+  - Probado sobre una copia local de producción: no hay drift y los saldos de las cuentas no cambian.
+
+```
+Separá lo que se debe (Invoice) de lo que entra (Payment con PaymentAllocation) para permitir pagos parciales, anticipos y saldo a favor.
+Los pagos a socios (PartnerPayment) son libres y se descuentan del total acumulado (Σ Payout − Σ PartnerPayment), no de payouts puntuales.
+Agregá AuditLog y migrá los datos existentes sin cambiar ningún saldo.
+```
+
+### P9.2: Lógica y API de cobros
+- **Estado:** [x]
+- **Depende de:** P9.1
+- **Fecha:** 13/11/2026 · **Commit:** · **Notas:**
+  - `lib/billing/payments.ts`: `preparePayment`/`registerPayment` (FIFO por vencimiento o factura elegida, sobrante como saldo a favor), `applyContractCredit` (se llama al crear facturas manuales y recurrentes), `reversePayment`, `customContractRoom` y `getContractAccounts`.
+  - `lib/finance/payment-date.ts`: fecha futura → 400; más de 45 días atrás, antes del inicio del contrato o antes de la conciliación → 409 con `warnings` hasta que llegue `confirmDate: true`.
+  - API: `POST/GET /api/payments`, `POST /api/payments/[id]/reverse`. `PATCH /api/invoices/[id]` usa la misma lógica. `POST /api/invoices` devuelve 409 si un contrato a medida supera el total. `POST /api/contracts` acepta `billingMode`, `installments` y `dueDate`.
+  - Cancelar una factura con cobros parciales los libera como saldo a favor.
+  - Verificado con un script de 20 escenarios (parcial, saldo a favor, reversión, crédito en recurrentes, fechas, pagos a socios, saldo de cuenta).
+
+```
+Implementá el registro, la aplicación y la reversión de cobros con validación de fechas y auditoría.
+```
+
+### P9.3: UI de cobros, contratos y cuenta corriente
+- **Estado:** [x]
+- **Depende de:** P9.2
+- **Fecha:** 13/11/2026 · **Commit:** · **Notas:**
+  - `components/finance/payment-modal.tsx` (monto libre, equivalente en otra moneda, nota, reparto y confirmación de fecha) y `reverse-modal.tsx`.
+  - Facturación: badge "Parcial", detalle de cada cobro aplicado y botón para revertirlo.
+  - Contratos: selector "Cobro flexible / Plan de cuotas" con `installment-plan.tsx`, barra de cobrado y botón "Registrar cobro".
+  - Ficha del cliente: "Cuenta corriente" por contrato, pendientes con lo cobrado parcial y lista de cobros con reversión.
+
+```
+Llevá los cobros flexibles a Facturación, Contratos y la ficha del cliente.
+```
+
+### P9.4: Socios, movimientos y auditoría
+- **Estado:** [x]
+- **Depende de:** P9.2
+- **Fecha:** 13/11/2026 · **Commit:** · **Notas:**
+  - Finanzas → Socios: botón "Registrar pago" (socio, cuenta, fecha, monto libre y concepto), tarjetas con acumulado, pagado y saldo o adelanto, historial con reversión y detalle de lo acumulado por cobro. Se eliminó `POST /api/payouts/[id]/pay`.
+  - Finanzas → Movimientos: título y link al origen (cliente o socio), usuario que lo cargó y saldo después de cada movimiento al filtrar por cuenta.
+  - Finanzas → Auditoría (`/api/audit`, solo OWNER).
+
+```
+Pagos a socios por monto y fecha libres, movimientos con origen y saldo acumulado, y pantalla de auditoría.
+```
+
+### P9.5: IA en pausa
+- **Estado:** [x]
+- **Depende de:** nada
+- **Fecha:** 13/11/2026 · **Commit:** · **Notas:** `/dashboard/ia` muestra "Próximamente" y `/api/ia/chat` responde 503 sin llamar a ningún proveedor. El chat anterior queda en el historial de git. P6.3 se retoma cuando se elija el proveedor.
+
+### P9.6: Corrección de datos de Popeye
+- **Estado:** [~]
+- **Depende de:** P9.1 en producción
+- **Fecha:** 13/11/2026 · **Commit:** · **Notas:** `scripts/fix-popeye-2026-11.ts` (dry run por defecto, `--apply` para aplicar). Pasa el contrato a cobro flexible, cancela las 4 facturas, crea un cargo de $1.100.000, deja un solo cobro de $400.000 del 10/11/2026, revierte el duplicado de $366.666,67 y sube el ajuste de saldo de 2.523.162,32 a 2.889.828,99 para que el saldo de Ualá ARS no cambie. Probado sobre la copia local de producción. Falta correrlo en producción después del deploy.
+
+```
+NODE_OPTIONS="--conditions=react-server" npx tsx scripts/fix-popeye-2026-11.ts          # dry run
+NODE_OPTIONS="--conditions=react-server" npx tsx scripts/fix-popeye-2026-11.ts --apply  # aplica
+```
+
+---
+
 ## Backlog de ideas (sin prompt todavía)
 
 - Integración con AFIP/ARCA para facturación electrónica.

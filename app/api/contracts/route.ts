@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { ClientStage, ContractType, Currency, PaymentStatus } from "@prisma/client";
+import { BillingMode, ClientStage, ContractType, Currency, PaymentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { findClientProject } from "@/lib/projects";
 import { parsePaymentDay } from "@/lib/billing/payment-day";
 import { dueDateKey, periodDueDate } from "@/lib/dates";
 import { parseShares, replaceSplit, type ShareInput } from "@/lib/finance/splits";
+import { getContractAccounts } from "@/lib/billing/payments";
+import { requireRole } from "@/lib/auth/session";
+import { audit } from "@/lib/audit";
+import { formatAmount } from "@/lib/format";
 
 type CreateContractBody = {
   clientId: string;
@@ -13,13 +17,48 @@ type CreateContractBody = {
   type: ContractType;
   totalAmount: number;
   currency: Currency;
-  installmentsCount: number;
+  installmentsCount?: number;
+  billingMode?: BillingMode;
+  installments?: { amount: number | string; dueDate: string }[];
+  dueDate?: string | null;
   startDate: string;
   paymentDay?: number | string | null;
   shares?: unknown;
 };
 
 const monthPeriod = (d: Date) => dueDateKey(d).slice(0, 7);
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+type Installment = { amount: number; dueDate: Date };
+
+function equalInstallments(total: number, count: number, start: Date, day: number): Installment[] {
+  const base = Math.floor((total / count) * 100) / 100;
+  return Array.from({ length: count }, (_, i) => ({
+    amount: i === count - 1 ? round2(total - base * (count - 1)) : base,
+    dueDate: addMonthsUtc(start, i, day),
+  }));
+}
+
+function parseInstallments(value: unknown, total: number): { ok: true; items: Installment[] } | { ok: false; error: string } {
+  if (!Array.isArray(value) || value.length === 0) return { ok: false, error: "Cargá al menos una cuota" };
+  const items: Installment[] = [];
+  for (const raw of value) {
+    const amount = round2(Number(raw?.amount));
+    const key = String(raw?.dueDate ?? "").slice(0, 10);
+    const dueDate = new Date(`${key}T00:00:00Z`);
+    if (!(amount > 0)) return { ok: false, error: "Cada cuota tiene que tener un monto mayor a cero" };
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(key) || Number.isNaN(dueDate.getTime())) {
+      return { ok: false, error: "Cada cuota tiene que tener una fecha válida" };
+    }
+    items.push({ amount, dueDate });
+  }
+  const sum = round2(items.reduce((acc, i) => acc + i.amount, 0));
+  if (Math.abs(sum - total) > 0.001) {
+    return { ok: false, error: `Las cuotas suman ${sum.toLocaleString("es-AR")} y el total es ${total.toLocaleString("es-AR")}` };
+  }
+  return { ok: true, items: items.sort((a, b) => a.dueDate.getTime() - b.dueDate.getTime()) };
+}
 
 function addMonthsUtc(start: Date, months: number, day: number) {
   const y = start.getUTCFullYear();
@@ -30,10 +69,14 @@ function addMonthsUtc(start: Date, months: number, day: number) {
 
 export async function POST(req: NextRequest) {
   try {
-    const body: CreateContractBody = await req.json();
-    const { clientId, softwareId, projectId, type, totalAmount, currency, installmentsCount, startDate } = body;
+    const auth = await requireRole();
+    if (!auth.ok) return auth.response;
 
-    if (!clientId || !softwareId || !type || totalAmount === undefined || !currency || !startDate) {
+    const body: CreateContractBody = await req.json();
+    const { clientId, softwareId, projectId, type, currency, installmentsCount, startDate } = body;
+    const totalAmount = round2(Number(body.totalAmount));
+
+    if (!clientId || !softwareId || !type || !(totalAmount > 0) || !currency || !startDate) {
       return NextResponse.json({ error: "Faltan campos requeridos" }, { status: 400 });
     }
 
@@ -45,12 +88,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Moneda inválida" }, { status: 400 });
     }
 
-    if (type === ContractType.CUSTOM_DEVELOPMENT && (!installmentsCount || installmentsCount < 1)) {
-      return NextResponse.json(
-        { error: "installmentsCount es requerido para CUSTOM_DEVELOPMENT" },
-        { status: 400 }
-      );
-    }
+    const billingMode =
+      type === ContractType.CUSTOM_DEVELOPMENT &&
+      body.billingMode !== BillingMode.FLEXIBLE &&
+      (body.installments || installmentsCount)
+        ? BillingMode.INSTALLMENTS
+        : BillingMode.FLEXIBLE;
 
     const client = await prisma.client.findFirst({ where: { id: clientId, deletedAt: null } });
     if (!client) {
@@ -83,6 +126,33 @@ export async function POST(req: NextRequest) {
     if (!day.ok) return NextResponse.json({ error: day.error }, { status: 400 });
     const paymentDay = day.value;
 
+    let plan: Installment[] = [];
+    if (type === ContractType.CUSTOM_DEVELOPMENT) {
+      if (billingMode === BillingMode.INSTALLMENTS) {
+        if (body.installments) {
+          const parsed = parseInstallments(body.installments, totalAmount);
+          if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+          plan = parsed.items;
+        } else {
+          const count = Number(installmentsCount);
+          if (!Number.isInteger(count) || count < 1) {
+            return NextResponse.json({ error: "Indicá la cantidad de cuotas" }, { status: 400 });
+          }
+          plan = equalInstallments(totalAmount, count, start, paymentDay ?? start.getUTCDate());
+        }
+      } else {
+        const dueKey = body.dueDate ? String(body.dueDate).slice(0, 10) : startKey;
+        const dueDate = new Date(`${dueKey}T00:00:00Z`);
+        if (Number.isNaN(dueDate.getTime()) || dueDate < start) {
+          return NextResponse.json(
+            { error: "La fecha estimada de cobro tiene que ser igual o posterior al inicio" },
+            { status: 400 }
+          );
+        }
+        plan = [{ amount: totalAmount, dueDate }];
+      }
+    }
+
     let shares: ShareInput[] | null = null;
     if (body.shares !== undefined && body.shares !== null) {
       const parsed = await parseShares(body.shares);
@@ -108,27 +178,34 @@ export async function POST(req: NextRequest) {
           currency,
           startDate: start,
           paymentDay,
+          billingMode,
         },
       });
       if (shares) await replaceSplit(tx, contract.id, shares);
 
-      if (type === ContractType.CUSTOM_DEVELOPMENT) {
-        const installmentAmount = parseFloat((totalAmount / installmentsCount).toFixed(2));
+      await audit(tx, {
+        userId: auth.session.userId,
+        action: "contract.create",
+        entity: "Contract",
+        entityId: contract.id,
+        summary: `Contrato de ${formatAmount(totalAmount, currency)} para ${client.companyName}`,
+        diff: { type, totalAmount, currency, billingMode, installments: plan.map((p) => p.amount) },
+      });
 
+      if (type === ContractType.CUSTOM_DEVELOPMENT) {
         const invoices = await Promise.all(
-          Array.from({ length: installmentsCount }, (_, i) => {
-            const dueDate = addMonthsUtc(start, i, paymentDay ?? start.getUTCDate());
-            return tx.invoice.create({
+          plan.map((item) =>
+            tx.invoice.create({
               data: {
                 contractId: contract.id,
-                amount: installmentAmount,
-                dueDate,
+                amount: item.amount,
+                dueDate: item.dueDate,
                 status: PaymentStatus.PENDING,
                 currency,
-                period: monthPeriod(dueDate),
+                period: monthPeriod(item.dueDate),
               },
-            });
-          })
+            })
+          )
         );
 
         return { contract, invoices };
@@ -183,7 +260,8 @@ export async function GET(req: NextRequest) {
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json(contracts);
+    const accounts = await getContractAccounts(contracts.map((c) => c.id));
+    return NextResponse.json(contracts.map((c) => ({ ...c, account: accounts.get(c.id) ?? null })));
   } catch (error) {
     console.error("[GET /api/contracts]", error);
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 });

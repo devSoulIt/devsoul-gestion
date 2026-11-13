@@ -94,7 +94,7 @@ export async function runReminders({ dryRun = false }: { dryRun?: boolean } = {}
       companyName: client.companyName,
       softwareName: software.name,
       period: invoice.period,
-      amount: invoice.amount.toString(),
+      amount: (Number(invoice.amount) - Number(invoice.paidAmount)).toFixed(2),
       currency: invoice.currency,
       dueDate: invoice.dueDate,
       daysFromDue,

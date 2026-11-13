@@ -62,7 +62,13 @@ export type TransactionRow = {
   transferGroupId: string | null;
   account: { id: string; name: string; currency: CurrencyCode };
   category: { id: string; name: string } | null;
-  invoice: { id: string; period: string } | null;
+  payment: {
+    id: string;
+    contract: { id: string; client: { id: string; companyName: string }; software: { name: string } };
+  } | null;
+  partnerPayment: { id: string; concept: string | null; user: { id: string; name: string } } | null;
+  createdBy: { name: string } | null;
+  balanceAfter: number | null;
 };
 
 export type TransactionsResponse = {
@@ -82,7 +88,7 @@ export const PROVIDER_LABELS: Record<Provider, string> = {
 
 export const SOURCE_LABELS: Record<TxSource, string> = {
   MANUAL: "Manual",
-  INVOICE: "Factura",
+  INVOICE: "Cobro",
   TRANSFER: "Transferencia",
   UALA_IMPORT: "Import Ualá",
   UALA_WEBHOOK: "Ualá Bis",

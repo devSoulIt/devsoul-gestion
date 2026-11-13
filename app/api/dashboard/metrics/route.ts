@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { PaymentStatus, TransactionType, TicketStatus, ContractType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentRates } from "@/lib/finance/rates";
-import { invoiceAmountArs } from "@/lib/finance/invoices";
+import { invoiceAmountArs, invoiceOutstandingArs } from "@/lib/finance/invoices";
 
 const MONTHS_ES = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
 
@@ -20,7 +20,7 @@ export async function GET() {
           where: { type: TransactionType.INCOME, date: { gte: startOfMonth, lte: endOfMonth } },
         }),
         prisma.invoice.findMany({
-          select: { amount: true, currency: true, rateToArs: true },
+          select: { amount: true, paidAmount: true, currency: true, rateToArs: true },
           where: { status: PaymentStatus.PENDING, dueDate: { gte: startOfMonth, lte: endOfMonth } },
         }),
         prisma.client.count({ where: { status: true, deletedAt: null, stage: "CLIENT" } }),
@@ -92,7 +92,7 @@ export async function GET() {
 
     return NextResponse.json({
       ingresosMes: Number(ingresoAgg._sum.amountArs ?? 0),
-      porCobrar: porCobrarList.reduce((acc, inv) => acc + toArs(inv), 0),
+      porCobrar: porCobrarList.reduce((acc, inv) => acc + invoiceOutstandingArs(inv, rates.USD), 0),
       cotizacionUsd: rates.USD,
       clientesActivos,
       ticketsAbiertos,

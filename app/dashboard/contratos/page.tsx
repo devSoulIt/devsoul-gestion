@@ -5,7 +5,10 @@ import { Chip } from "@heroui/react/chip";
 import { Input } from "@heroui/react/input";
 import { Button } from "@heroui/react/button";
 import { Modal } from "@heroui/react";
-import { Plus, FileSignature, Power, SlidersHorizontal } from "lucide-react";
+import { Plus, FileSignature, HandCoins, Power, SlidersHorizontal } from "lucide-react";
+import { PaymentModal, type PaymentTarget } from "@/components/finance/payment-modal";
+import type { AccountsResponse } from "../finanzas/types";
+import { InstallmentPlan, installmentsSum, type InstallmentRow } from "./installment-plan";
 import { useJson } from "@/lib/hooks/use-json";
 import {
   SplitEditor,
@@ -29,7 +32,16 @@ type ContractRow = {
   project: { id: string; name: string } | null;
   paymentDay: number | null;
   splitShares: { userId: string | null; percent: string }[];
+  billingMode: "FLEXIBLE" | "INSTALLMENTS";
   _count: { invoices: number };
+  account: {
+    agreed: number | null;
+    invoiced: number;
+    collected: number;
+    pending: number;
+    credit: number;
+    balance: number;
+  } | null;
 };
 
 type ClientOption = { id: string; companyName: string; stage: "PROSPECT" | "CLIENT"; email: string | null };
@@ -42,7 +54,9 @@ type FormState = {
   type: ContractRow["type"];
   totalAmount: string;
   currency: "ARS" | "USD";
-  installmentsCount: string;
+  billingMode: "FLEXIBLE" | "INSTALLMENTS";
+  installments: InstallmentRow[];
+  dueDate: string;
   startDate: string;
   paymentDay: string;
   customSplit: boolean;
@@ -61,7 +75,9 @@ const EMPTY_FORM: FormState = {
   type: "SAAS_SUBSCRIPTION",
   totalAmount: "",
   currency: "ARS",
-  installmentsCount: "1",
+  billingMode: "FLEXIBLE",
+  installments: [],
+  dueDate: "",
   startDate: new Date().toISOString().slice(0, 10),
   paymentDay: "",
   customSplit: false,
@@ -101,6 +117,8 @@ export default function ContratosPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [editedSplit, setEditedSplit] = useState<SplitShare[] | null>(null);
   const [billing, setBilling] = useState<BillableContract | null>(null);
+  const [collecting, setCollecting] = useState<PaymentTarget | null>(null);
+  const accountsQ = useJson<AccountsResponse>("/api/accounts");
 
   const load = async () => {
     try {
@@ -167,8 +185,14 @@ export default function ContratosPage() {
       setFormError("Completá todos los campos obligatorios con valores válidos.");
       return;
     }
-    if (form.type === "CUSTOM_DEVELOPMENT" && Number(form.installmentsCount) < 1) {
-      setFormError("Indicá la cantidad de cuotas.");
+    const custom = form.type === "CUSTOM_DEVELOPMENT";
+    const usesPlan = custom && form.billingMode === "INSTALLMENTS";
+    if (usesPlan && form.installments.length === 0) {
+      setFormError("Cargá el plan de cuotas.");
+      return;
+    }
+    if (usesPlan && Math.abs(installmentsSum(form.installments) - Number(form.totalAmount)) > 0.001) {
+      setFormError("Las cuotas tienen que sumar el monto total.");
       return;
     }
     const day = form.paymentDay ? Number(form.paymentDay) : null;
@@ -193,7 +217,11 @@ export default function ContratosPage() {
           type: form.type,
           totalAmount: Number(form.totalAmount),
           currency: form.currency,
-          installmentsCount: Number(form.installmentsCount),
+          billingMode: custom ? form.billingMode : undefined,
+          installments: usesPlan
+            ? form.installments.map((r) => ({ amount: Number(r.amount), dueDate: r.dueDate }))
+            : undefined,
+          dueDate: custom && !usesPlan && form.dueDate ? form.dueDate : undefined,
           startDate: form.startDate,
           paymentDay: day,
           shares: form.customSplit ? formSplit : null,
@@ -301,9 +329,16 @@ export default function ContratosPage() {
                   {c.endDate ? ` · hasta ${formatDate(c.endDate)}` : ""}
                 </p>
                 <p className="text-xs text-white/40">
-                  {c.paymentDay ? `Paga el día ${c.paymentDay}` : "Paga el día 10"}
+                  {c.type === "CUSTOM_DEVELOPMENT"
+                    ? c.billingMode === "FLEXIBLE"
+                      ? "Cobro flexible"
+                      : "Plan de cuotas"
+                    : c.paymentDay
+                      ? `Paga el día ${c.paymentDay}`
+                      : "Paga el día 10"}
                   {c.splitShares.length > 0 && <span className="text-acento-lima/70"> · reparto propio</span>}
                 </p>
+                {c.account && <ContractAccountSummary account={c.account} currency={c.currency} />}
               </div>
 
               <div className="flex items-center gap-2">
@@ -318,6 +353,22 @@ export default function ContratosPage() {
               </div>
 
               <div className="flex justify-end md:justify-center gap-3">
+                <button
+                  onClick={() =>
+                    setCollecting({
+                      contractId: c.id,
+                      title: c.client.companyName,
+                      subtitle: c.software.name,
+                      currency: c.currency,
+                      pending: Math.max(0, c.account?.balance ?? 0),
+                      shares: c.splitShares.map((s) => ({ userId: s.userId, percent: Number(s.percent) })),
+                    })
+                  }
+                  title="Registrar cobro"
+                  className="text-acento-lima hover:text-acento-lima/70 transition-colors"
+                >
+                  <HandCoins size={18} />
+                </button>
                 <button
                   onClick={() =>
                     setBilling({
@@ -468,28 +519,6 @@ export default function ContratosPage() {
                     </div>
                   </div>
 
-                  {form.type === "CUSTOM_DEVELOPMENT" && (
-                    <div>
-                      <label className="text-xs text-white/50 mb-1 block">Cantidad de cuotas *</label>
-                      <Input
-                        type="number"
-                        value={form.installmentsCount}
-                        onChange={(e) => setField("installmentsCount", e.target.value)}
-                        placeholder="1"
-                        className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-white/30 outline-none focus:border-acento-lima/50 transition-colors"
-                      />
-                      {Number(form.installmentsCount) > 0 && Number(form.totalAmount) > 0 && (
-                        <p className="text-xs text-white/40 mt-1">
-                          {form.installmentsCount} cuota{Number(form.installmentsCount) !== 1 ? "s" : ""} de{" "}
-                          {formatAmount(
-                            Number(form.totalAmount) / Number(form.installmentsCount),
-                            form.currency
-                          )}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
                   <div>
                     <label className="text-xs text-white/50 mb-1 block">Fecha de inicio *</label>
                     <Input
@@ -499,6 +528,57 @@ export default function ContratosPage() {
                       className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-acento-lima/50 transition-colors [color-scheme:dark]"
                     />
                   </div>
+
+                  {form.type === "CUSTOM_DEVELOPMENT" && (
+                    <div className="space-y-2">
+                      <label className="text-xs text-white/50 block">Forma de cobro *</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {(
+                          [
+                            ["FLEXIBLE", "Cobro flexible", "El cliente paga lo que puede, cuando puede"],
+                            ["INSTALLMENTS", "Plan de cuotas", "Anticipo y cuotas con monto y fecha"],
+                          ] as const
+                        ).map(([mode, title, hint]) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => setField("billingMode", mode)}
+                            className={`text-left rounded-lg border px-3 py-2 transition-colors ${
+                              form.billingMode === mode
+                                ? "border-acento-lima/60 bg-acento-lima/10"
+                                : "border-white/10 bg-white/[0.03] hover:bg-white/5"
+                            }`}
+                          >
+                            <p className="text-sm text-white">{title}</p>
+                            <p className="text-[11px] text-white/40">{hint}</p>
+                          </button>
+                        ))}
+                      </div>
+                      {form.billingMode === "FLEXIBLE" ? (
+                        <div>
+                          <label className="text-xs text-white/50 mb-1 block">Fecha estimada de cobro total</label>
+                          <Input
+                            type="date"
+                            value={form.dueDate}
+                            min={form.startDate}
+                            onChange={(e) => setField("dueDate", e.target.value)}
+                            className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-acento-lima/50 transition-colors [color-scheme:dark]"
+                          />
+                          <p className="text-[11px] text-white/40 mt-1">
+                            Se crea un solo cargo por el total. Cada pago se descuenta del saldo, sea del monto que sea.
+                          </p>
+                        </div>
+                      ) : (
+                        <InstallmentPlan
+                          total={Number(form.totalAmount) || 0}
+                          currency={form.currency}
+                          startDate={form.startDate}
+                          rows={form.installments}
+                          onChange={(rows) => setField("installments", rows)}
+                        />
+                      )}
+                    </div>
+                  )}
 
                   <div>
                     <label className="text-xs text-white/50 mb-1 block">Día de pago del mes</label>
@@ -550,6 +630,30 @@ export default function ContratosPage() {
       </Modal>
 
       <ContractBillingModal contract={billing} onClose={() => setBilling(null)} onSaved={load} />
+      <PaymentModal
+        open={collecting !== null}
+        targets={collecting ? [collecting] : []}
+        accounts={accountsQ.data?.accounts ?? []}
+        onClose={() => setCollecting(null)}
+        onSaved={load}
+      />
+    </div>
+  );
+}
+
+function ContractAccountSummary({ account, currency }: { account: NonNullable<ContractRow["account"]>; currency: "ARS" | "USD" }) {
+  const base = account.agreed ?? account.invoiced;
+  const progress = base > 0 ? Math.min(100, (account.collected / base) * 100) : 0;
+  return (
+    <div className="mt-1.5 space-y-1">
+      <div className="h-1 rounded-full bg-white/10 overflow-hidden">
+        <div className="h-full bg-acento-lima" style={{ width: `${progress}%` }} />
+      </div>
+      <p className="text-[11px] text-white/50">
+        Cobrado {formatAmount(account.collected, currency)}
+        {account.balance > 0 && <span className="text-amber-300/90"> · falta {formatAmount(account.balance, currency)}</span>}
+        {account.credit > 0 && <span className="text-acento-lima/80"> · a favor {formatAmount(account.credit, currency)}</span>}
+      </p>
     </div>
   );
 }

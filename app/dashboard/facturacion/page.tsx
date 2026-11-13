@@ -5,10 +5,11 @@ import { Chip } from "@heroui/react/chip";
 import { Input } from "@heroui/react/input";
 import { Button } from "@heroui/react/button";
 import { Modal } from "@heroui/react";
-import { Bell, BellRing, CalendarClock, CheckCircle, FileText, Plus, Repeat, XCircle, Zap } from "lucide-react";
+import { Bell, BellRing, CalendarClock, CheckCircle, FileText, Plus, Repeat, Undo2, XCircle, Zap } from "lucide-react";
 import { useJson } from "@/lib/hooks/use-json";
 import type { AccountsResponse } from "../finanzas/types";
-import { PayInvoiceModal, type PayableInvoice } from "./pay-invoice-modal";
+import { PaymentModal, type PaymentTarget } from "@/components/finance/payment-modal";
+import { ReverseModal } from "@/components/finance/reverse-modal";
 import { AutomationModal } from "./automation-modal";
 import { CancelInvoiceModal, type InvoiceSummary } from "./cancel-invoice-modal";
 import { DueDateModal } from "./due-date-modal";
@@ -18,6 +19,7 @@ import type { TaskDefaults } from "@/components/tasks/types";
 type InvoiceRow = {
   id: string;
   amount: string;
+  paidAmount: string;
   dueDate: string;
   status: "PAID" | "PENDING" | "CANCELLED";
   delayDays: number | null;
@@ -28,7 +30,12 @@ type InvoiceRow = {
   paymentDate: string | null;
   recurringKey: string | null;
   reminders: { kind: string; sentAt: string }[];
+  allocations: {
+    amount: string;
+    payment: { id: string; date: string; amount: string; currency: "ARS" | "USD"; account: { name: string } };
+  }[];
   contract: {
+    id: string;
     client: { id: string; companyName: string };
     software: { id: string; name: string };
     splitShares: { userId: string | null; percent: string }[];
@@ -113,7 +120,8 @@ const EMPTY_FORM: FormState = {
 export default function FacturacionPage() {
   const [statusFilter, setStatusFilter] = useState("");
   const [periodFilter, setPeriodFilter] = useState("");
-  const [paying, setPaying] = useState<PayableInvoice | null>(null);
+  const [paying, setPaying] = useState<PaymentTarget | null>(null);
+  const [reversing, setReversing] = useState<{ url: string; title: string; detail: string } | null>(null);
   const [automationOpen, setAutomationOpen] = useState(false);
   const [cancelling, setCancelling] = useState<InvoiceSummary | null>(null);
   const [rescheduling, setRescheduling] = useState<InvoiceSummary | null>(null);
@@ -344,9 +352,32 @@ export default function FacturacionPage() {
                   <p className="text-xs text-white/50 md:text-sm">{inv.period}</p>
 
                   {/* Monto */}
-                  <p className="text-sm font-semibold text-white">
-                    {formatAmount(inv.amount, inv.currency)}
-                  </p>
+                  <div>
+                    <p className="text-sm font-semibold text-white">{formatAmount(inv.amount, inv.currency)}</p>
+                    {inv.status === "PENDING" && Number(inv.paidAmount) > 0 && (
+                      <p className="text-xs text-amber-300/90">
+                        Cobrado {formatAmount(inv.paidAmount, inv.currency)} · falta{" "}
+                        {formatAmount(String(Number(inv.amount) - Number(inv.paidAmount)), inv.currency)}
+                      </p>
+                    )}
+                    {inv.allocations.map((a) => (
+                      <button
+                        key={a.payment.id}
+                        onClick={() =>
+                          setReversing({
+                            url: `/api/payments/${a.payment.id}/reverse`,
+                            title: "Revertir cobro",
+                            detail: `Cobro de ${formatAmount(a.payment.amount, a.payment.currency)} del ${formatDate(a.payment.date)} en ${a.payment.account.name}. Si se aplicó a otras facturas, también se libera.`,
+                          })
+                        }
+                        title="Revertir este cobro"
+                        className="flex items-center gap-1 text-[11px] text-white/40 hover:text-red-400 transition-colors"
+                      >
+                        <Undo2 size={11} />
+                        {formatDate(a.payment.date)} · {formatAmount(a.amount, inv.currency)}
+                      </button>
+                    ))}
+                  </div>
 
                   {/* Vencimiento */}
                   <div className="text-xs md:text-sm">
@@ -365,7 +396,7 @@ export default function FacturacionPage() {
                   {/* Estado */}
                   <div>
                     <Chip color={STATUS_CHIP[inv.status].color} size="sm" variant="soft">
-                      {STATUS_CHIP[inv.status].label}
+                      {inv.status === "PENDING" && Number(inv.paidAmount) > 0 ? "Parcial" : STATUS_CHIP[inv.status].label}
                     </Chip>
                   </div>
 
@@ -409,8 +440,13 @@ export default function FacturacionPage() {
                       <button
                         onClick={() =>
                           setPaying({
-                            ...summary,
-                            contractShares: inv.contract.splitShares.map((s) => ({
+                            contractId: inv.contract.id,
+                            invoiceId: inv.id,
+                            title: inv.contract.client.companyName,
+                            subtitle: `${inv.contract.software.name} · período ${inv.period}`,
+                            currency: inv.currency,
+                            pending: Math.round((Number(inv.amount) - Number(inv.paidAmount)) * 100) / 100,
+                            shares: inv.contract.splitShares.map((s) => ({
                               userId: s.userId,
                               percent: Number(s.percent),
                             })),
@@ -570,12 +606,14 @@ export default function FacturacionPage() {
       <CancelInvoiceModal invoice={cancelling} onClose={() => setCancelling(null)} onDone={invoicesQ.reload} />
       <DueDateModal invoice={rescheduling} onClose={() => setRescheduling(null)} onDone={invoicesQ.reload} />
 
-      <PayInvoiceModal
-        invoice={paying}
+      <PaymentModal
+        open={paying !== null}
+        targets={paying ? [paying] : []}
         accounts={accounts}
         onClose={() => setPaying(null)}
-        onPaid={invoicesQ.reload}
+        onSaved={invoicesQ.reload}
       />
+      <ReverseModal target={reversing} onClose={() => setReversing(null)} onDone={invoicesQ.reload} />
     </div>
   );
 }

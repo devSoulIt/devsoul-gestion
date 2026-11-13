@@ -45,11 +45,27 @@ export type ProjectRow = {
   _count: { tickets: number; tasks: number };
 };
 
-export type ClientContract = ProjectContract & { project: { id: string; name: string } | null };
+export type ContractAccount = {
+  agreed: number | null;
+  invoiced: number;
+  collected: number;
+  pending: number;
+  credit: number;
+  balance: number;
+};
+
+export type ClientContract = ProjectContract & {
+  project: { id: string; name: string } | null;
+  billingMode: "FLEXIBLE" | "INSTALLMENTS";
+  splitShares: { userId: string | null; percent: string }[];
+  account: ContractAccount | null;
+};
 
 export type InvoiceRow = {
   id: string;
   amount: string;
+  paidAmount: string;
+  outstandingArs: number;
   currency: CurrencyCode;
   dueDate: string;
   paymentDate: string | null;

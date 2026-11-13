@@ -2,6 +2,7 @@ import "server-only";
 import { ContractType, PaymentStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { businessDateKey, currentPeriod, periodBounds, periodDueDate } from "@/lib/dates";
+import { applyContractCredit } from "./payments";
 
 const RECURRING_TYPES: ContractType[] = [ContractType.SAAS_SUBSCRIPTION, ContractType.MAINTENANCE];
 export const INVOICE_DUE_DAY = Number(process.env.INVOICE_DUE_DAY ?? 10);
@@ -39,16 +40,20 @@ export async function generateRecurringInvoices(period: string = currentPeriod()
       continue;
     }
     try {
-      const invoice = await prisma.invoice.create({
-        data: {
-          contractId: contract.id,
-          amount: contract.totalAmount,
-          currency: contract.currency,
-          period,
-          dueDate: resolveDueDate(period, contract.paymentDay ?? INVOICE_DUE_DAY),
-          status: PaymentStatus.PENDING,
-          recurringKey: `${contract.id}:${period}`,
-        },
+      const invoice = await prisma.$transaction(async (tx) => {
+        const created = await tx.invoice.create({
+          data: {
+            contractId: contract.id,
+            amount: contract.totalAmount,
+            currency: contract.currency,
+            period,
+            dueDate: resolveDueDate(period, contract.paymentDay ?? INVOICE_DUE_DAY),
+            status: PaymentStatus.PENDING,
+            recurringKey: `${contract.id}:${period}`,
+          },
+        });
+        await applyContractCredit(tx, contract.id);
+        return created;
       });
       result.created.push({ invoiceId: invoice.id, contractId: contract.id, client: contract.client.companyName });
     } catch (error) {

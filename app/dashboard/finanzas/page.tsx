@@ -399,6 +399,11 @@ function TransactionItem({
   onDelete: () => void;
 }) {
   const isTransfer = tx.type === "TRANSFER_IN" || tx.type === "TRANSFER_OUT";
+  const origin = tx.payment
+    ? { label: `${tx.payment.contract.client.companyName} · ${tx.payment.contract.software.name}`, href: `/dashboard/clientes/${tx.payment.contract.client.id}` }
+    : tx.partnerPayment
+      ? { label: tx.partnerPayment.user.name, href: "/dashboard/finanzas/socios" }
+      : null;
   const isAdjustment = tx.type === "ADJUSTMENT_IN" || tx.type === "ADJUSTMENT_OUT";
   const positive = tx.type === "INCOME" || tx.type === "TRANSFER_IN" || tx.type === "ADJUSTMENT_IN";
   const color = isTransfer
@@ -416,7 +421,11 @@ function TransactionItem({
       : "Transferencia enviada"
     : isAdjustment
       ? "Ajuste de saldo"
-      : tx.category?.name ?? "Sin categoría";
+      : tx.payment
+        ? `Cobro · ${tx.payment.contract.client.companyName}`
+        : tx.partnerPayment
+          ? `Pago a ${tx.partnerPayment.user.name}`
+          : tx.category?.name ?? "Sin categoría";
 
   return (
     <div className="glass rounded-xl px-4 py-3 flex items-center justify-between gap-3">
@@ -437,7 +446,13 @@ function TransactionItem({
           <p className="text-xs text-white/40 truncate">
             {formatDate(tx.date)}
             {tx.description ? ` · ${tx.description}` : ""}
+            {tx.createdBy ? ` · ${tx.createdBy.name}` : ""}
           </p>
+          {origin && (
+            <Link href={origin.href} className="text-[11px] text-acento-lima/70 hover:underline truncate block">
+              Ver origen: {origin.label}
+            </Link>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-3 flex-shrink-0">
@@ -448,6 +463,9 @@ function TransactionItem({
           </p>
           {tx.currency !== "ARS" && (
             <p className="text-[10px] text-white/40">≈ {formatAmount(tx.amountArs)}</p>
+          )}
+          {tx.balanceAfter !== null && (
+            <p className="text-[10px] text-white/40">Saldo {formatAmount(tx.balanceAfter, tx.currency)}</p>
           )}
         </div>
         {deletable && (

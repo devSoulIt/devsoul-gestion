@@ -12,7 +12,6 @@ export type LedgerEntryInput = {
   categoryId?: string | null;
   description?: string | null;
   source?: TransactionSource;
-  invoiceId?: string;
   transferGroupId?: string;
   createdById?: string;
 };
@@ -30,7 +29,6 @@ export async function buildLedgerEntry(input: LedgerEntryInput): Promise<Prisma.
     description: input.description || null,
     date: input.date,
     source: input.source ?? TransactionSource.MANUAL,
-    invoiceId: input.invoiceId,
     transferGroupId: input.transferGroupId,
     createdById: input.createdById,
   };

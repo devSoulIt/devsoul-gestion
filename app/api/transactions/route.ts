@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { FINANCIAL_ROLES, requireRole } from "@/lib/auth/session";
 import { buildLedgerEntry, parseAmount, parseDate } from "@/lib/finance/ledger";
 import { RateUnavailableError } from "@/lib/finance/rates";
+import { SIGN, getAccountBalance } from "@/lib/finance/balances";
 
 type CreateTransactionBody = {
   type: TransactionType;
@@ -57,7 +58,14 @@ export async function GET(req: NextRequest) {
         include: {
           account: { select: { id: true, name: true, currency: true } },
           category: { select: { id: true, name: true } },
-          invoice: { select: { id: true, period: true } },
+          payment: {
+            select: {
+              id: true,
+              contract: { select: { id: true, client: { select: { id: true, companyName: true } }, software: { select: { name: true } } } },
+            },
+          },
+          partnerPayment: { select: { id: true, concept: true, user: { select: { id: true, name: true } } } },
+          createdBy: { select: { name: true } },
         },
         orderBy: [{ date: "desc" }, { createdAt: "desc" }],
         skip,
@@ -67,12 +75,14 @@ export async function GET(req: NextRequest) {
       prisma.transaction.groupBy({ by: ["type"], where, _sum: { amountArs: true } }),
     ]);
 
+    const balances = accountId ? await runningBalances(accountId) : null;
+
     const sumOf = (t: TransactionType) => Number(sums.find((s) => s.type === t)?._sum.amountArs ?? 0);
     const income = sumOf(TransactionType.INCOME);
     const expense = sumOf(TransactionType.EXPENSE);
 
     return NextResponse.json({
-      data,
+      data: data.map((tx) => ({ ...tx, balanceAfter: balances?.get(tx.id) ?? null })),
       total,
       page,
       totalPages: Math.ceil(total / limit),
@@ -131,4 +141,23 @@ export async function POST(req: NextRequest) {
     console.error("[POST /api/transactions]", error);
     return NextResponse.json({ error: "Error interno del servidor" }, { status: 500 });
   }
+}
+
+async function runningBalances(accountId: string) {
+  const [current, rows] = await Promise.all([
+    getAccountBalance(prisma, accountId),
+    prisma.transaction.findMany({
+      where: { accountId },
+      select: { id: true, type: true, amount: true },
+      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+    }),
+  ]);
+  const result = new Map<string, number>();
+  if (!current) return result;
+  let running = current.balance;
+  for (const row of rows) {
+    result.set(row.id, Math.round(running * 100) / 100);
+    running -= SIGN[row.type] * Number(row.amount);
+  }
+  return result;
 }

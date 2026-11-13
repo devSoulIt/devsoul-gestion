@@ -6,6 +6,21 @@ Estados: 🟢 terminado · 🟡 en curso · ⚪ planificado
 
 ---
 
+## 🟡 v0.11: Cobros flexibles, cuenta corriente y pagos a socios (Fase 9)
+
+**Objetivo:** que el sistema refleje cómo cobramos y pagamos de verdad: los clientes pagan montos y fechas variables, y los socios retiran cada tanto lo que necesitan.
+
+- **Cobros separados de las facturas:** un cobro puede ser por cualquier monto. Se aplica a las facturas pendientes más viejas del contrato (o a la elegida); si es menor queda la factura en "Parcial" y si sobra queda como saldo a favor, que se descuenta solo de la próxima factura.
+- **Desarrollo a medida flexible o con plan:** al crear el contrato se elige "Cobro flexible" (un solo cargo por el total) o "Plan de cuotas" (anticipo y cuotas con monto y fecha editables; la última absorbe el redondeo). No se pueden cargar facturas sueltas que superen el total pactado.
+- **Cuenta corriente:** cada contrato y la ficha del cliente muestran pactado, cobrado, lo que falta y el saldo a favor, con la lista de cobros.
+- **Pagos a socios libres:** en Finanzas → Socios se registra cada pago con el monto y la fecha reales. Cada cobro suma la parte de cada socio y los pagos se descuentan del total acumulado; si se paga de más, queda como adelanto.
+- **Fechas controladas:** no se aceptan fechas futuras y se pide confirmación si la fecha es de hace más de 45 días, anterior al inicio del contrato o anterior a la última conciliación de la cuenta.
+- **Revertir y auditar:** los cobros y pagos a socios se pueden revertir con motivo. La auditoría (Finanzas → Auditoría, solo OWNER) registra quién cargó, revirtió o cambió cada cosa.
+- **Movimientos claros:** cada movimiento dice de dónde viene (cobro de qué cliente, pago a qué socio, ajuste, transferencia) con link al origen, y al filtrar por cuenta se ve el saldo después de cada movimiento.
+- **IA en pausa:** el chat queda como "Próximamente" y no llama a ningún proveedor mientras se evalúa cuál usar.
+
+---
+
 ## 🟡 v0.10: Saldo real y rendimiento diario
 
 **Objetivo:** que los saldos del sistema coincidan con lo que hay en Ualá aunque no esté conectado.
@@ -93,4 +108,5 @@ El sistema ya es mobile-first, así que lo más rápido y barato es convertirlo 
 | 🟢 v0.7 | 09/11/2026 | Proyectos, recordatorios internos y ficha del cliente. |
 | 🟡 v0.9 | 11/11/2026 | Día de pago, atrasos, cancelación, reparto entre socios y gastos fijos (en `develop`). |
 | 🟡 v0.10 | 11/11/2026 | Ajuste de saldo real y rendimiento diario (en `develop`). |
+| 🟡 v0.11 | 13/11/2026 | Cobros flexibles, cuenta corriente, pagos libres a socios, auditoría e IA en pausa (en `develop`). |
 | ⚪ v0.8 | — | PWA y notificaciones push. |

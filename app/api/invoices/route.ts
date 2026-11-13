@@ -3,6 +3,10 @@ import { Currency, PaymentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { delayDays } from "@/lib/billing/delay";
 import { businessDateKey } from "@/lib/dates";
+import { requireRole } from "@/lib/auth/session";
+import { audit } from "@/lib/audit";
+import { applyContractCredit, customContractRoom } from "@/lib/billing/payments";
+import { formatAmount } from "@/lib/format";
 
 type CreateInvoiceBody = {
   contractId: string;
@@ -14,6 +18,9 @@ type CreateInvoiceBody = {
 
 export async function POST(req: NextRequest) {
   try {
+    const auth = await requireRole();
+    if (!auth.ok) return auth.response;
+
     const body: CreateInvoiceBody = await req.json();
     const { contractId, amount, dueDate, period, currency } = body;
 
@@ -34,23 +41,50 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Contrato no encontrado" }, { status: 404 });
     }
 
-    const invoice = await prisma.invoice.create({
-      data: {
-        contractId,
-        amount,
-        dueDate: new Date(dueDate),
-        status: PaymentStatus.PENDING,
-        currency: currency ?? contract.currency,
-        period,
-      },
-      include: {
-        contract: {
-          include: {
-            client: { select: { id: true, companyName: true } },
-            software: { select: { id: true, name: true } },
+    const room = await customContractRoom(prisma, contractId);
+    if (room !== null && (currency ?? contract.currency) === contract.currency && Number(amount) > room) {
+      return NextResponse.json(
+        {
+          error:
+            room > 0
+              ? `El contrato es por ${formatAmount(Number(contract.totalAmount), contract.currency)} y solo quedan ${formatAmount(room, contract.currency)} sin facturar. Si el cliente pagó un monto distinto, registrá el cobro sobre la factura existente.`
+              : "El contrato ya está facturado completo. Registrá el cobro sobre las facturas existentes.",
+        },
+        { status: 409 }
+      );
+    }
+
+    const invoice = await prisma.$transaction(async (tx) => {
+      const created = await tx.invoice.create({
+        data: {
+          contractId,
+          amount,
+          dueDate: new Date(dueDate),
+          status: PaymentStatus.PENDING,
+          currency: currency ?? contract.currency,
+          period,
+        },
+      });
+      await applyContractCredit(tx, contractId);
+      await audit(tx, {
+        userId: auth.session.userId,
+        action: "invoice.create",
+        entity: "Invoice",
+        entityId: created.id,
+        summary: `Factura ${period} de ${formatAmount(Number(amount), created.currency)} cargada a mano`,
+        diff: { amount: Number(amount), period, dueDate },
+      });
+      return tx.invoice.findUniqueOrThrow({
+        where: { id: created.id },
+        include: {
+          contract: {
+            include: {
+              client: { select: { id: true, companyName: true } },
+              software: { select: { id: true, name: true } },
+            },
           },
         },
-      },
+      });
     });
 
     return NextResponse.json(invoice, { status: 201 });
@@ -98,8 +132,11 @@ export async function GET(req: NextRequest) {
             select: { kind: true, sentAt: true },
             orderBy: { sentAt: "desc" },
           },
-          payouts: {
-            select: { id: true, userId: true, percent: true, amount: true, currency: true, status: true, paidAt: true },
+          allocations: {
+            select: {
+              amount: true,
+              payment: { select: { id: true, date: true, amount: true, currency: true, account: { select: { name: true } } } },
+            },
             orderBy: { createdAt: "asc" },
           },
           cancelledBy: { select: { name: true } },

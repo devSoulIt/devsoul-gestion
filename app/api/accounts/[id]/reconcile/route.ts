@@ -12,6 +12,7 @@ import {
 import { RateUnavailableError } from "@/lib/finance/rates";
 import { dateFromKey, isDateKey } from "@/lib/finance/yield";
 import { businessDateKey } from "@/lib/dates";
+import { audit } from "@/lib/audit";
 
 function parseBalance(value: unknown) {
   if (value === null || value === undefined || value === "") return null;
@@ -92,6 +93,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       await tx.financialAccount.update({
         where: { id },
         data: { reconciledAt: new Date(), reconciledBalance: realBalance },
+      });
+      await audit(tx, {
+        userId: auth.session.userId,
+        action: "account.reconcile",
+        entity: "Account",
+        entityId: id,
+        summary: `Saldo de ${current.account.name} ajustado a ${realBalance.toLocaleString("es-AR")} (diferencia ${diff.toLocaleString("es-AR")})`,
+        diff: { systemBalance: current.balance, realBalance, diff, treatment },
       });
 
       return { systemBalance: current.balance, realBalance, diff, transaction };

@@ -3,7 +3,7 @@ import { Currency, Prisma, TransactionType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getCurrentRates, toArs } from "./rates";
 
-const SIGN: Record<TransactionType, 1 | -1> = {
+export const SIGN: Record<TransactionType, 1 | -1> = {
   INCOME: 1,
   TRANSFER_IN: 1,
   ADJUSTMENT_IN: 1,
